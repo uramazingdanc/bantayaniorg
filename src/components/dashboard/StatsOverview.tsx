@@ -1,28 +1,34 @@
-import { useDetectionStore } from '@/store/detectionStore';
-import { useAdvisoryStore } from '@/store/advisoryStore';
+import { useDetections } from '@/hooks/useDetections';
+import { useAdvisories } from '@/hooks/useAdvisories';
 import {
   Bug,
-  Users,
   CheckCircle,
   AlertTriangle,
   TrendingUp,
   Clock,
+  Loader2,
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export const StatsOverview = () => {
-  const { detections } = useDetectionStore();
-  const { advisories } = useAdvisoryStore();
+  const { detections, isLoading: detectionsLoading, getStats } = useDetections();
+  const { advisories, isLoading: advisoriesLoading } = useAdvisories();
 
-  const pending = detections.filter((d) => d.status === 'pending').length;
-  const verified = detections.filter((d) => d.status === 'verified').length;
-  const rejected = detections.filter((d) => d.status === 'rejected').length;
-  const activeAdvisories = advisories.filter((a) => a.isActive).length;
+  if (detectionsLoading || advisoriesLoading) {
+    return (
+      <div className="flex items-center justify-center h-48">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const { total, pending, verified, rejected } = getStats();
+  const activeAdvisories = advisories.filter((a) => a.is_active).length;
 
   const stats = [
     {
       label: 'Total Reports',
-      value: detections.length,
+      value: total,
       icon: Bug,
       color: 'text-primary',
       bgColor: 'bg-primary/10',
@@ -50,23 +56,42 @@ export const StatsOverview = () => {
     },
   ];
 
-  // Mock trend data
-  const trendData = [
-    { day: 'Mon', reports: 12 },
-    { day: 'Tue', reports: 19 },
-    { day: 'Wed', reports: 15 },
-    { day: 'Thu', reports: 25 },
-    { day: 'Fri', reports: 22 },
-    { day: 'Sat', reports: 18 },
-    { day: 'Sun', reports: 28 },
-  ];
+  // Group detections by day for trend chart
+  const trendData = (() => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const counts = new Array(7).fill(0);
+    
+    detections.forEach((d) => {
+      const day = new Date(d.created_at).getDay();
+      counts[day]++;
+    });
 
-  const pieData = [
-    { name: 'Rice Stem Borer', value: 35, color: '#4CAF50' },
-    { name: 'Fall Armyworm', value: 28, color: '#66BB6A' },
-    { name: 'Aphids', value: 20, color: '#81C784' },
-    { name: 'Others', value: 17, color: '#A5D6A7' },
-  ];
+    return days.map((day, index) => ({
+      day,
+      reports: counts[index],
+    }));
+  })();
+
+  // Group detections by pest type for pie chart
+  const pieData = (() => {
+    const pestCounts: Record<string, number> = {};
+    detections.forEach((d) => {
+      pestCounts[d.pest_type] = (pestCounts[d.pest_type] || 0) + 1;
+    });
+
+    const colors = ['#4CAF50', '#66BB6A', '#81C784', '#A5D6A7', '#C8E6C9'];
+    const sorted = Object.entries(pestCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4);
+
+    const total = sorted.reduce((sum, [, count]) => sum + count, 0);
+
+    return sorted.map(([name, count], index) => ({
+      name,
+      value: total > 0 ? Math.round((count / total) * 100) : 0,
+      color: colors[index] || colors[0],
+    }));
+  })();
 
   return (
     <div className="space-y-6">
@@ -145,39 +170,47 @@ export const StatsOverview = () => {
             <h3 className="font-semibold text-foreground">Pest Distribution</h3>
           </div>
           <div className="h-48 flex items-center">
-            <ResponsiveContainer width="50%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={40}
-                  outerRadius={70}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
+            {pieData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="50%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex-1 space-y-2">
+                  {pieData.map((item) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="text-xs text-muted-foreground flex-1 truncate">
+                        {item.name}
+                      </span>
+                      <span className="text-xs font-medium text-foreground">
+                        {item.value}%
+                      </span>
+                    </div>
                   ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex-1 space-y-2">
-              {pieData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-xs text-muted-foreground flex-1">
-                    {item.name}
-                  </span>
-                  <span className="text-xs font-medium text-foreground">
-                    {item.value}%
-                  </span>
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+              <div className="w-full text-center text-muted-foreground">
+                No detection data yet
+              </div>
+            )}
           </div>
         </div>
       </div>

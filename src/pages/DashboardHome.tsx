@@ -1,16 +1,16 @@
 import { StatsOverview } from '@/components/dashboard/StatsOverview';
 import { LiveDetectionFeed } from '@/components/dashboard/LiveDetectionFeed';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const DashboardHome = () => {
-  const { user } = useAuthStore();
+  const { profile } = useAuthContext();
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">
-          Welcome back, {user?.name?.split(' ')[0] || 'Admin'}
+          Welcome back, {profile?.name?.split(' ')[0] || 'Admin'}
         </h1>
         <p className="text-muted-foreground">
           Monitor pest detections and manage advisories across your region.
