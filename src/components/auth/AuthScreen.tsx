@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Loader2, Sprout, Building2 } from 'lucide-react';
 import { BantayAniLogo } from '@/components/BantayAniLogo';
-import { useAuthStore, UserRole } from '@/store/authStore';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { UserRole } from '@/hooks/useAuth';
 
 export const AuthScreen = () => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signup');
@@ -13,21 +14,23 @@ export const AuthScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const { login, signup, isLoading } = useAuthStore();
+  const { signIn, signUp } = useAuthContext();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
     try {
       if (mode === 'signin') {
-        await login(email, password, role);
+        await signIn(email, password);
       } else {
-        await signup(email, password, name, role);
+        await signUp(email, password, name, role);
       }
       
-      // Navigate based on role
+      // Navigate based on role (will be determined after auth completes)
       if (role === 'lgu_admin') {
         navigate('/dashboard');
       } else {
@@ -35,6 +38,8 @@ export const AuthScreen = () => {
       }
     } catch (error) {
       console.error('Auth error:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -169,10 +174,10 @@ export const AuthScreen = () => {
 
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting}
             className="w-full h-12 text-base font-semibold btn-primary-glow"
           >
-            {isLoading ? (
+            {isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 {mode === 'signup' ? 'Creating account...' : 'Signing in...'}

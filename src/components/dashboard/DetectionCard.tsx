@@ -1,23 +1,29 @@
 import { formatDistanceToNow } from 'date-fns';
 import { MapPin, Clock, Percent, Check, X, AlertCircle, Loader2 } from 'lucide-react';
-import { Detection, DetectionStatus, useDetectionStore } from '@/store/detectionStore';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import type { DetectionWithProfile } from '@/hooks/useDetections';
+import type { Database } from '@/integrations/supabase/types';
+
+type DetectionStatus = Database['public']['Enums']['detection_status'];
 
 interface DetectionCardProps {
-  detection: Detection;
+  detection: DetectionWithProfile;
+  onUpdateStatus?: (id: string, status: DetectionStatus, notes?: string) => Promise<void>;
   showActions?: boolean;
 }
 
-export const DetectionCard = ({ detection, showActions = true }: DetectionCardProps) => {
-  const { updateStatus } = useDetectionStore();
+export const DetectionCard = ({ detection, onUpdateStatus, showActions = true }: DetectionCardProps) => {
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleStatusUpdate = async (status: DetectionStatus) => {
+    if (!onUpdateStatus) return;
     setIsUpdating(true);
-    await new Promise((r) => setTimeout(r, 500));
-    updateStatus(detection.id, status);
-    setIsUpdating(false);
+    try {
+      await onUpdateStatus(detection.id, status);
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const getStatusBadge = (status: DetectionStatus) => {
@@ -52,8 +58,8 @@ export const DetectionCard = ({ detection, showActions = true }: DetectionCardPr
         {/* Image */}
         <div className="relative w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
           <img
-            src={detection.imageUrl}
-            alt={detection.pestType}
+            src={detection.image_url || '/placeholder.svg'}
+            alt={detection.pest_type}
             className="w-full h-full object-cover"
           />
           <div className="absolute bottom-1 right-1">
@@ -66,9 +72,9 @@ export const DetectionCard = ({ detection, showActions = true }: DetectionCardPr
           <div className="flex items-start justify-between gap-2">
             <div>
               <h4 className="font-semibold text-foreground truncate">
-                {detection.pestType}
+                {detection.pest_type}
               </h4>
-              <p className="text-sm text-muted-foreground">{detection.farmerName}</p>
+              <p className="text-sm text-muted-foreground">{detection.farmer_name}</p>
             </div>
           </div>
 
@@ -76,22 +82,26 @@ export const DetectionCard = ({ detection, showActions = true }: DetectionCardPr
           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              <span>{formatDistanceToNow(new Date(detection.timestamp), { addSuffix: true })}</span>
+              <span>{formatDistanceToNow(new Date(detection.created_at), { addSuffix: true })}</span>
             </div>
             <div className="flex items-center gap-1">
               <Percent className="w-3 h-3" />
-              <span>{detection.aiConfidence.toFixed(1)}% confidence</span>
+              <span>{Number(detection.confidence).toFixed(1)}% confidence</span>
             </div>
             <div className="flex items-center gap-1 col-span-2">
               <MapPin className="w-3 h-3" />
               <span className="truncate">
-                {detection.gpsCoordinates.lat.toFixed(4)}, {detection.gpsCoordinates.lng.toFixed(4)} • {detection.cropType}
+                {detection.latitude && detection.longitude 
+                  ? `${Number(detection.latitude).toFixed(4)}, ${Number(detection.longitude).toFixed(4)} • `
+                  : ''
+                }
+                {detection.crop_type}
               </span>
             </div>
           </div>
 
           {/* Actions */}
-          {showActions && detection.status === 'pending' && (
+          {showActions && detection.status === 'pending' && onUpdateStatus && (
             <div className="mt-3 flex gap-2">
               <Button
                 size="sm"

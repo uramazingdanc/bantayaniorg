@@ -1,16 +1,27 @@
-import { useDetectionStore } from '@/store/detectionStore';
 import { DetectionCard } from './DetectionCard';
-import { Inbox, Filter } from 'lucide-react';
+import { Inbox, Filter, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { useDetections } from '@/hooks/useDetections';
+import type { Database } from '@/integrations/supabase/types';
+
+type DetectionStatus = Database['public']['Enums']['detection_status'];
 
 export const LiveDetectionFeed = () => {
-  const { detections } = useDetectionStore();
-  const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+  const { detections, isLoading, updateDetectionStatus } = useDetections(true);
+  const [filter, setFilter] = useState<'all' | DetectionStatus>('all');
 
   const filteredDetections = detections.filter(
     (d) => filter === 'all' || d.status === filter
   );
+
+  if (isLoading) {
+    return (
+      <div className="glass-card p-5 h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="glass-card p-5 h-full flex flex-col">
@@ -48,7 +59,11 @@ export const LiveDetectionFeed = () => {
           </div>
         ) : (
           filteredDetections.map((detection) => (
-            <DetectionCard key={detection.id} detection={detection} />
+            <DetectionCard 
+              key={detection.id} 
+              detection={detection} 
+              onUpdateStatus={updateDetectionStatus}
+            />
           ))
         )}
       </div>
