@@ -1,13 +1,23 @@
 import { AuthScreen } from '@/components/auth/AuthScreen';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { Navigate } from 'react-router-dom';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, role, isLoading } = useAuthContext();
 
-  // Redirect if already authenticated
-  if (isAuthenticated && user) {
-    const redirectPath = user.role === 'lgu_admin' ? '/dashboard' : '/farmer';
+  // Show loading while checking auth state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Redirect if already authenticated with known role
+  if (isAuthenticated && role) {
+    const redirectPath = role === 'lgu_admin' ? '/dashboard' : '/farmer';
     return <Navigate to={redirectPath} replace />;
   }
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Loader2, Sprout, Building2 } from 'lucide-react';
 import { BantayAniLogo } from '@/components/BantayAniLogo';
@@ -10,34 +10,42 @@ import type { UserRole } from '@/hooks/useAuth';
 
 export const AuthScreen = () => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signup');
-  const [role, setRole] = useState<UserRole>('farmer');
+  const [selectedRole, setSelectedRole] = useState<UserRole>('farmer');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingAuth, setPendingAuth] = useState(false);
   
-  const { signIn, signUp } = useAuthContext();
+  const { signIn, signUp, isAuthenticated, role, isLoading } = useAuthContext();
   const navigate = useNavigate();
+
+  // Watch for authentication state and redirect once role is determined
+  useEffect(() => {
+    if (isAuthenticated && role && !isLoading) {
+      const redirectPath = role === 'lgu_admin' ? '/dashboard' : '/farmer';
+      navigate(redirectPath, { replace: true });
+    }
+  }, [isAuthenticated, role, isLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setPendingAuth(true);
     
     try {
       if (mode === 'signin') {
         await signIn(email, password);
+        // Redirect will happen via useEffect once role is fetched
       } else {
-        await signUp(email, password, name, role);
-      }
-      
-      // Navigate based on role (will be determined after auth completes)
-      if (role === 'lgu_admin') {
-        navigate('/dashboard');
-      } else {
-        navigate('/farmer');
+        await signUp(email, password, name, selectedRole);
+        // For signup, we know the role - redirect immediately
+        const redirectPath = selectedRole === 'lgu_admin' ? '/dashboard' : '/farmer';
+        navigate(redirectPath, { replace: true });
       }
     } catch (error) {
       console.error('Auth error:', error);
+      setPendingAuth(false);
     } finally {
       setIsSubmitting(false);
     }
@@ -88,9 +96,9 @@ export const AuthScreen = () => {
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
-              onClick={() => setRole('farmer')}
+              onClick={() => setSelectedRole('farmer')}
               className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                role === 'farmer'
+                selectedRole === 'farmer'
                   ? 'bg-primary/20 border-primary text-primary shadow-glow'
                   : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
               }`}
@@ -100,9 +108,9 @@ export const AuthScreen = () => {
             </button>
             <button
               type="button"
-              onClick={() => setRole('lgu_admin')}
+              onClick={() => setSelectedRole('lgu_admin')}
               className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                role === 'lgu_admin'
+                selectedRole === 'lgu_admin'
                   ? 'bg-primary/20 border-primary text-primary shadow-glow'
                   : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
               }`}
