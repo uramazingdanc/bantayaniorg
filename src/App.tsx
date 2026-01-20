@@ -14,6 +14,10 @@ import GISMap from "./pages/GISMap";
 import PestReports from "./pages/PestReports";
 import Advisories from "./pages/Advisories";
 import FarmerApp from "./pages/FarmerApp";
+import FarmerProfile from "./pages/farmer/FarmerProfile";
+import FarmerHistory from "./pages/farmer/FarmerHistory";
+import FarmerCamera from "./pages/farmer/FarmerCamera";
+import FarmerAdvisories from "./pages/farmer/FarmerAdvisories";
 
 const queryClient = new QueryClient();
 
@@ -44,12 +48,44 @@ const App = () => (
               <Route path="advisories" element={<Advisories />} />
             </Route>
 
-            {/* Farmer App Route */}
+            {/* Farmer App Routes */}
             <Route
               path="/farmer"
               element={
                 <ProtectedRoute allowedRoles={['farmer']}>
                   <FarmerApp />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farmer/profile"
+              element={
+                <ProtectedRoute allowedRoles={['farmer']}>
+                  <FarmerProfile />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farmer/history"
+              element={
+                <ProtectedRoute allowedRoles={['farmer']}>
+                  <FarmerHistory />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farmer/camera"
+              element={
+                <ProtectedRoute allowedRoles={['farmer']}>
+                  <FarmerCamera />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farmer/advisories"
+              element={
+                <ProtectedRoute allowedRoles={['farmer']}>
+                  <FarmerAdvisories />
                 </ProtectedRoute>
               }
             />
