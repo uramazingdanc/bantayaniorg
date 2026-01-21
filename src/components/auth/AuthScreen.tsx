@@ -193,8 +193,8 @@ export const AuthScreen = () => {
               htmlFor="terms"
               className="text-sm text-muted-foreground cursor-pointer"
             >
-              I agree to the{' '}
-              <a href="#" className="text-primary hover:underline">
+            I agree to the{' '}
+              <a href="/terms" target="_blank" className="text-primary hover:underline">
                 Terms and Conditions
               </a>
             </label>

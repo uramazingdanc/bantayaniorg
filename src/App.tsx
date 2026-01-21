@@ -21,6 +21,7 @@ import FarmerCamera from "./pages/farmer/FarmerCamera";
 import FarmerAdvisories from "./pages/farmer/FarmerAdvisories";
 import FarmerMap from "./pages/farmer/FarmerMap";
 import PestScanPage from "./pages/farmer/PestScanPage";
+import TermsAndConditions from "./pages/TermsAndConditions";
 
 const queryClient = new QueryClient();
 
@@ -32,8 +33,9 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            {/* Public Route */}
+            {/* Public Routes */}
             <Route path="/" element={<Index />} />
+            <Route path="/terms" element={<TermsAndConditions />} />
 
             {/* LGU Admin Dashboard Routes */}
             <Route
