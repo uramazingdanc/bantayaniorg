@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: Bug, label: 'Verification Queue', path: '/dashboard/verification' },
   { icon: Users, label: 'User Management', path: '/dashboard/users' },
   { icon: Map, label: 'GIS Map', path: '/dashboard/map' },
   { icon: Bug, label: 'Pest Reports', path: '/dashboard/reports' },
