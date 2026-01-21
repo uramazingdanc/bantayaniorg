@@ -73,12 +73,59 @@ export function useFarmers() {
 
   useEffect(() => {
     fetchFarmers();
+
+    // Subscribe to realtime updates for profiles
+    const profilesChannel = supabase
+      .channel('profiles_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles',
+        },
+        () => {
+          console.log('Profiles updated, refreshing farmers...');
+          fetchFarmers();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to realtime updates for detections (to update stats)
+    const detectionsChannel = supabase
+      .channel('farmer_detections_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pest_detections',
+        },
+        () => {
+          console.log('Detections updated, refreshing farmer stats...');
+          fetchFarmers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(detectionsChannel);
+    };
   }, [fetchFarmers]);
+
+  const getStats = () => {
+    const total = farmers.length;
+    const totalReports = farmers.reduce((sum, f) => sum + f.total_reports, 0);
+    const verifiedReports = farmers.reduce((sum, f) => sum + f.verified_reports, 0);
+    return { total, totalReports, verifiedReports };
+  };
 
   return {
     farmers,
     isLoading,
     error,
     refetch: fetchFarmers,
+    getStats,
   };
 }

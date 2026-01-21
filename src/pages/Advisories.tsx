@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useAdvisoryStore, AdvisoryPriority } from '@/store/advisoryStore';
+import { useAdvisories } from '@/hooks/useAdvisories';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Bell,
@@ -11,7 +11,7 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  X,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,44 +32,72 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const priorityConfig: Record<AdvisoryPriority, { icon: typeof AlertCircle; color: string; bg: string }> = {
-  low: { icon: Info, color: 'text-blue-400', bg: 'bg-blue-500/20' },
-  medium: { icon: AlertCircle, color: 'text-yellow-400', bg: 'bg-yellow-500/20' },
-  high: { icon: AlertTriangle, color: 'text-orange-400', bg: 'bg-orange-500/20' },
-  critical: { icon: Zap, color: 'text-red-400', bg: 'bg-red-500/20' },
+type SeverityLevel = 'low' | 'medium' | 'high' | 'critical';
+
+const severityConfig: Record<SeverityLevel, { icon: typeof AlertCircle; color: string; bg: string }> = {
+  low: { icon: Info, color: 'text-primary', bg: 'bg-primary/20' },
+  medium: { icon: AlertCircle, color: 'text-accent-foreground', bg: 'bg-accent/20' },
+  high: { icon: AlertTriangle, color: 'text-primary', bg: 'bg-primary/20' },
+  critical: { icon: Zap, color: 'text-destructive', bg: 'bg-destructive/20' },
 };
 
 const Advisories = () => {
-  const { advisories, addAdvisory, toggleActive, deleteAdvisory } = useAdvisoryStore();
+  const { advisories, isLoading, createAdvisory, toggleActive, deleteAdvisory } = useAdvisories();
   const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [newAdvisory, setNewAdvisory] = useState({
     title: '',
     content: '',
-    pestType: '',
     affectedCrops: '',
     affectedRegions: '',
-    priority: 'medium' as AdvisoryPriority,
-    createdBy: 'Admin',
+    severity: 'medium' as SeverityLevel,
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    addAdvisory({
-      ...newAdvisory,
-      affectedCrops: newAdvisory.affectedCrops.split(',').map((c) => c.trim()),
-      affectedRegions: newAdvisory.affectedRegions.split(',').map((r) => r.trim()),
-    });
-    setNewAdvisory({
-      title: '',
-      content: '',
-      pestType: '',
-      affectedCrops: '',
-      affectedRegions: '',
-      priority: 'medium',
-      createdBy: 'Admin',
-    });
-    setIsOpen(false);
+    setIsSubmitting(true);
+    
+    try {
+      await createAdvisory({
+        title: newAdvisory.title,
+        content: newAdvisory.content,
+        severity: newAdvisory.severity,
+        affected_crops: newAdvisory.affectedCrops.split(',').map((c) => c.trim()).filter(Boolean),
+        affected_regions: newAdvisory.affectedRegions.split(',').map((r) => r.trim()).filter(Boolean),
+      });
+      
+      setNewAdvisory({
+        title: '',
+        content: '',
+        affectedCrops: '',
+        affectedRegions: '',
+        severity: 'medium',
+      });
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Error creating advisory:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  const handleToggleActive = async (id: string, isActive: boolean) => {
+    await toggleActive(id, isActive);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this advisory?')) {
+      await deleteAdvisory(id);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -109,38 +137,24 @@ const Advisories = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Pest Type</Label>
-                  <Input
-                    value={newAdvisory.pestType}
-                    onChange={(e) =>
-                      setNewAdvisory({ ...newAdvisory, pestType: e.target.value })
-                    }
-                    placeholder="e.g., Fall Armyworm"
-                    className="input-dark"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Priority</Label>
-                  <Select
-                    value={newAdvisory.priority}
-                    onValueChange={(v) =>
-                      setNewAdvisory({ ...newAdvisory, priority: v as AdvisoryPriority })
-                    }
-                  >
-                    <SelectTrigger className="input-dark">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="glass-card">
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="critical">Critical</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>Severity</Label>
+                <Select
+                  value={newAdvisory.severity}
+                  onValueChange={(v) =>
+                    setNewAdvisory({ ...newAdvisory, severity: v as SeverityLevel })
+                  }
+                >
+                  <SelectTrigger className="input-dark">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-card">
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="critical">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -150,7 +164,7 @@ const Advisories = () => {
                   onChange={(e) =>
                     setNewAdvisory({ ...newAdvisory, affectedCrops: e.target.value })
                   }
-                  placeholder="Rice, Corn, Vegetables"
+                  placeholder="Rice, Corn, Vegetables, Onion"
                   className="input-dark"
                   required
                 />
@@ -188,11 +202,19 @@ const Advisories = () => {
                   variant="outline"
                   className="flex-1"
                   onClick={() => setIsOpen(false)}
+                  disabled={isSubmitting}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" className="flex-1 btn-primary-glow">
-                  Publish Advisory
+                <Button type="submit" className="flex-1 btn-primary-glow" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Publishing...
+                    </>
+                  ) : (
+                    'Publish Advisory'
+                  )}
                 </Button>
               </div>
             </form>
@@ -200,101 +222,141 @@ const Advisories = () => {
         </Dialog>
       </div>
 
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="glass-card p-4 text-center">
+          <p className="text-2xl font-bold text-foreground">{advisories.length}</p>
+          <p className="text-xs text-muted-foreground">Total Advisories</p>
+        </div>
+        <div className="glass-card p-4 text-center">
+          <p className="text-2xl font-bold text-primary">{advisories.filter(a => a.is_active).length}</p>
+          <p className="text-xs text-muted-foreground">Active</p>
+        </div>
+        <div className="glass-card p-4 text-center">
+          <p className="text-2xl font-bold text-destructive">
+            {advisories.filter(a => a.severity === 'critical' || a.severity === 'high').length}
+          </p>
+          <p className="text-xs text-muted-foreground">High Priority</p>
+        </div>
+        <div className="glass-card p-4 text-center">
+          <p className="text-2xl font-bold text-muted-foreground">
+            {advisories.filter(a => !a.is_active).length}
+          </p>
+          <p className="text-xs text-muted-foreground">Inactive</p>
+        </div>
+      </div>
+
       {/* Advisory List */}
-      <div className="space-y-4">
-        {advisories.map((advisory) => {
-          const PriorityIcon = priorityConfig[advisory.priority].icon;
-          return (
-            <div
-              key={advisory.id}
-              className={`glass-card p-5 transition-all ${
-                !advisory.isActive ? 'opacity-60' : ''
-              }`}
-            >
-              <div className="flex items-start gap-4">
-                {/* Priority Icon */}
-                <div
-                  className={`p-2.5 rounded-xl ${priorityConfig[advisory.priority].bg}`}
-                >
-                  <PriorityIcon
-                    className={`w-5 h-5 ${priorityConfig[advisory.priority].color}`}
-                  />
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h3 className="font-semibold text-foreground">
-                        {advisory.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {advisory.content}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-8 h-8 p-0"
-                        onClick={() => toggleActive(advisory.id)}
-                      >
-                        {advisory.isActive ? (
-                          <EyeOff className="w-4 h-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="w-4 h-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-8 h-8 p-0 text-destructive hover:text-destructive"
-                        onClick={() => deleteAdvisory(advisory.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+      {advisories.length === 0 ? (
+        <div className="glass-card p-12 text-center">
+          <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
+          <h3 className="font-medium text-foreground mb-1">No advisories yet</h3>
+          <p className="text-sm text-muted-foreground">
+            Create your first advisory to alert farmers about pest threats
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {advisories.map((advisory) => {
+            const severity = (advisory.severity as SeverityLevel) || 'medium';
+            const config = severityConfig[severity] || severityConfig.medium;
+            const SeverityIcon = config.icon;
+            
+            return (
+              <div
+                key={advisory.id}
+                className={`glass-card p-5 transition-all ${
+                  !advisory.is_active ? 'opacity-60' : ''
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  {/* Severity Icon */}
+                  <div className={`p-2.5 rounded-xl ${config.bg}`}>
+                    <SeverityIcon className={`w-5 h-5 ${config.color}`} />
                   </div>
 
-                  {/* Tags */}
-                  <div className="flex flex-wrap gap-2 mt-3">
-                    <span className="px-2 py-0.5 text-xs bg-primary/20 text-primary rounded-full">
-                      {advisory.pestType}
-                    </span>
-                    {advisory.affectedCrops.map((crop) => (
-                      <span
-                        key={crop}
-                        className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded-full"
-                      >
-                        {crop}
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <h3 className="font-semibold text-foreground">
+                          {advisory.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {advisory.content}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0"
+                          onClick={() => handleToggleActive(advisory.id, advisory.is_active)}
+                        >
+                          {advisory.is_active ? (
+                            <EyeOff className="w-4 h-4 text-muted-foreground" />
+                          ) : (
+                            <Eye className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 text-destructive hover:text-destructive"
+                          onClick={() => handleDelete(advisory.id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <span className={`px-2 py-0.5 text-xs rounded-full capitalize ${config.bg} ${config.color}`}>
+                        {severity}
                       </span>
-                    ))}
-                  </div>
+                      {advisory.affected_crops?.map((crop) => (
+                        <span
+                          key={crop}
+                          className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded-full"
+                        >
+                          {crop}
+                        </span>
+                      ))}
+                    </div>
 
-                  {/* Meta */}
-                  <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                    <span>
-                      {formatDistanceToNow(new Date(advisory.createdAt), {
-                        addSuffix: true,
-                      })}
-                    </span>
-                    <span>By {advisory.createdBy}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded-full ${
-                        advisory.isActive
-                          ? 'bg-primary/20 text-primary'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {advisory.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                    {/* Regions */}
+                    {advisory.affected_regions?.length > 0 && (
+                      <p className="text-xs text-muted-foreground mt-2">
+                        📍 {advisory.affected_regions.join(', ')}
+                      </p>
+                    )}
+
+                    {/* Meta */}
+                    <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                      <span>
+                        {formatDistanceToNow(new Date(advisory.created_at), {
+                          addSuffix: true,
+                        })}
+                      </span>
+                      <span>By {advisory.creator_name || 'Admin'}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full ${
+                          advisory.is_active
+                            ? 'bg-primary/20 text-primary'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {advisory.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
