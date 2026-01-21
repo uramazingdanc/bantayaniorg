@@ -1,1 +1,10 @@
 project_id = "biytpglbufbkagtmrsme"
+
+[functions.verify-detection]
+verify_jwt = false
+
+[functions.upload-detection]
+verify_jwt = false
+
+[functions.detect-pest]
+verify_jwt = false

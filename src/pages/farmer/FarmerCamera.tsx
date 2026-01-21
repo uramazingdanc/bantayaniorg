@@ -1,32 +1,46 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera, Zap, ZapOff, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle2, X, MapPin } from 'lucide-react';
+import { ArrowLeft, Camera, Zap, ZapOff, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, MapPin, Bug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useDetections } from '@/hooks/useDetections';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const CROP_OPTIONS = [
-  'Rice', 'Corn', 'Coconut', 'Sugarcane', 'Banana', 
+  'Onion', 'Rice', 'Corn', 'Coconut', 'Sugarcane', 'Banana', 
   'Mango', 'Vegetables', 'Coffee', 'Cacao', 'Other'
 ];
 
-const MOCK_PESTS = [
-  { name: 'Rice Stem Borer', confidence: 0.92 },
-  { name: 'Brown Planthopper', confidence: 0.87 },
-  { name: 'Leaf Folder', confidence: 0.78 },
-  { name: 'Rice Bug', confidence: 0.85 },
-  { name: 'Corn Borer', confidence: 0.91 },
+// Target pests for detection
+const TARGET_PESTS = [
+  'Beet Armyworm',
+  'Fall Armyworm', 
+  'African Armyworm',
+  'Maize Stalk Borer',
+  'Rice Stem Borer',
+  'Brown Planthopper',
+  'Leaf Folder',
 ];
+
+interface DetectionResult {
+  detected: boolean;
+  pest_type: string;
+  scientific_name: string | null;
+  confidence: number;
+  life_stage: string | null;
+  severity: string | null;
+  description: string;
+  recommendations: string[];
+}
 
 interface CapturedImage {
   dataUrl: string;
   timestamp: string;
   location: { lat: number; lng: number } | null;
   cropType: string;
-  pestType: string;
-  confidence: number;
+  detection: DetectionResult | null;
 }
 
 const FarmerCamera = () => {
@@ -38,12 +52,13 @@ const FarmerCamera = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [autoDetect, setAutoDetect] = useState(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [cropType, setCropType] = useState('Rice');
+  const [cropType, setCropType] = useState('Onion');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [detectionResult, setDetectionResult] = useState<{ pest: string; confidence: number } | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<CapturedImage | null>(null);
   const [pendingUploads, setPendingUploads] = useState<CapturedImage[]>([]);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   const { uploadDetection } = useDetections();
 
@@ -114,8 +129,41 @@ const FarmerCamera = () => {
     return () => stopCamera();
   }, [startCamera, stopCamera]);
 
-  // Capture image
-  const handleCapture = useCallback((detection?: { pest: string; confidence: number }) => {
+  // Analyze image with AI
+  const analyzeImage = async (imageBase64: string): Promise<DetectionResult | null> => {
+    try {
+      setIsAnalyzing(true);
+      setAnalysisError(null);
+
+      const { data, error } = await supabase.functions.invoke('detect-pest', {
+        body: { 
+          image_base64: imageBase64,
+          crop_type: cropType,
+        },
+      });
+
+      if (error) {
+        console.error('AI analysis error:', error);
+        setAnalysisError(error.message || 'Analysis failed');
+        return null;
+      }
+
+      if (data?.detection) {
+        return data.detection;
+      }
+
+      return null;
+    } catch (err) {
+      console.error('Analysis error:', err);
+      setAnalysisError('Failed to analyze image');
+      return null;
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Capture and analyze image
+  const handleCapture = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
@@ -129,49 +177,40 @@ const FarmerCamera = () => {
     ctx.drawImage(video, 0, 0);
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    const randomPest = MOCK_PESTS[Math.floor(Math.random() * MOCK_PESTS.length)];
-    const pestInfo = detection || { pest: randomPest.name, confidence: randomPest.confidence };
+    
+    // Stop camera while processing
+    stopCamera();
 
     const captured: CapturedImage = {
       dataUrl,
       timestamp: new Date().toISOString(),
       location,
       cropType,
-      pestType: pestInfo.pest,
-      confidence: pestInfo.confidence,
+      detection: null,
     };
 
     setCapturedImage(captured);
-    setDetectionResult({ pest: captured.pestType, confidence: captured.confidence });
-    stopCamera();
-  }, [cropType, location, stopCamera]);
 
-  // Mock auto-detection simulation
+    // Analyze with AI if online
+    if (isOnline) {
+      const detection = await analyzeImage(dataUrl);
+      setCapturedImage(prev => prev ? { ...prev, detection } : null);
+    } else {
+      setAnalysisError('Offline - AI analysis unavailable');
+    }
+  }, [cropType, location, stopCamera, isOnline]);
+
+  // Auto-capture when AI detects something in continuous mode
   useEffect(() => {
-    if (!autoDetect || !isStreaming || capturedImage) return;
+    if (!autoDetect || !isStreaming || capturedImage || isAnalyzing) return;
 
+    // Auto-capture every 5 seconds for analysis
     const interval = setInterval(() => {
-      // Simulate random detection trigger
-      if (Math.random() > 0.7) {
-        const randomPest = MOCK_PESTS[Math.floor(Math.random() * MOCK_PESTS.length)];
-        const detectionData = { pest: randomPest.name, confidence: randomPest.confidence };
-        setDetectionResult(detectionData);
-        
-        // Auto-capture after brief delay
-        setTimeout(() => {
-          handleCapture(detectionData);
-        }, 500);
-      }
-    }, 3000);
+      handleCapture();
+    }, 5000);
 
     return () => clearInterval(interval);
-  }, [autoDetect, isStreaming, capturedImage, handleCapture]);
-
-  // Manual capture
-  const handleManualCapture = () => {
-    const randomPest = MOCK_PESTS[Math.floor(Math.random() * MOCK_PESTS.length)];
-    handleCapture({ pest: randomPest.name, confidence: randomPest.confidence });
-  };
+  }, [autoDetect, isStreaming, capturedImage, isAnalyzing, handleCapture]);
 
   // Upload or save offline
   const handleSubmit = async () => {
@@ -179,11 +218,15 @@ const FarmerCamera = () => {
 
     setIsProcessing(true);
 
+    const detection = capturedImage.detection;
+    const pestType = detection?.detected ? detection.pest_type : 'Unknown';
+    const confidence = detection?.confidence || 0;
+
     if (isOnline) {
       try {
         await uploadDetection({
-          pest_type: capturedImage.pestType,
-          confidence: capturedImage.confidence,
+          pest_type: pestType,
+          confidence: confidence,
           crop_type: capturedImage.cropType,
           latitude: capturedImage.location?.lat,
           longitude: capturedImage.location?.lng,
@@ -220,9 +263,10 @@ const FarmerCamera = () => {
 
     for (const upload of pendingUploads) {
       try {
+        const detection = upload.detection;
         await uploadDetection({
-          pest_type: upload.pestType,
-          confidence: upload.confidence,
+          pest_type: detection?.detected ? detection.pest_type : 'Unknown',
+          confidence: detection?.confidence || 0,
           crop_type: upload.cropType,
           latitude: upload.location?.lat,
           longitude: upload.location?.lng,
@@ -247,9 +291,21 @@ const FarmerCamera = () => {
   // Retake photo
   const handleRetake = () => {
     setCapturedImage(null);
-    setDetectionResult(null);
+    setAnalysisError(null);
     startCamera();
   };
+
+  // Get severity color
+  const getSeverityColor = (severity: string | null) => {
+    switch (severity) {
+      case 'high': return 'text-red-400 border-red-400';
+      case 'medium': return 'text-yellow-400 border-yellow-400';
+      case 'low': return 'text-green-400 border-green-400';
+      default: return 'text-gray-400 border-gray-400';
+    }
+  };
+
+  const detection = capturedImage?.detection;
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
@@ -303,8 +359,9 @@ const FarmerCamera = () => {
                 <div className="w-64 h-64 border-2 border-primary rounded-2xl relative">
                   <div className="absolute inset-0 border-2 border-primary/50 rounded-2xl animate-ping" />
                   <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap">
-                    <span className="text-sm text-white bg-black/50 px-3 py-1 rounded-full">
-                      Scanning for pests...
+                    <span className="text-sm text-white bg-black/50 px-3 py-1 rounded-full flex items-center gap-2">
+                      <Bug className="w-4 h-4" />
+                      AI Pest Detection Active
                     </span>
                   </div>
                 </div>
@@ -313,19 +370,86 @@ const FarmerCamera = () => {
           </>
         )}
 
+        {/* Analyzing Overlay */}
+        {isAnalyzing && (
+          <div className="absolute inset-0 bg-black/70 flex items-center justify-center">
+            <div className="text-center text-white">
+              <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4 text-primary" />
+              <p className="text-lg font-medium">Analyzing image...</p>
+              <p className="text-sm text-gray-400">Detecting armyworm species</p>
+            </div>
+          </div>
+        )}
+
         {/* Detection Result Overlay */}
-        {detectionResult && capturedImage && (
+        {capturedImage && !isAnalyzing && (
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent">
             <div className="glass-card p-4 max-w-md mx-auto">
-              <div className="flex items-center gap-3 mb-3">
-                <CheckCircle2 className="w-8 h-8 text-primary" />
-                <div>
-                  <h3 className="font-semibold text-lg text-white">{detectionResult.pest}</h3>
-                  <p className="text-sm text-gray-300">
-                    {Math.round(detectionResult.confidence * 100)}% confidence
-                  </p>
+              {detection?.detected ? (
+                <>
+                  <div className="flex items-start gap-3 mb-3">
+                    <CheckCircle2 className="w-8 h-8 text-primary flex-shrink-0" />
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-lg text-white">{detection.pest_type}</h3>
+                      {detection.scientific_name && (
+                        <p className="text-xs text-gray-400 italic">{detection.scientific_name}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        <Badge variant="outline" className="text-primary border-primary">
+                          {Math.round(detection.confidence * 100)}% confidence
+                        </Badge>
+                        {detection.severity && (
+                          <Badge variant="outline" className={getSeverityColor(detection.severity)}>
+                            {detection.severity} severity
+                          </Badge>
+                        )}
+                        {detection.life_stage && (
+                          <Badge variant="outline" className="text-blue-400 border-blue-400">
+                            {detection.life_stage}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {detection.description && (
+                    <p className="text-sm text-gray-300 mb-3">{detection.description}</p>
+                  )}
+
+                  {detection.recommendations?.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-400 mb-1">Recommendations:</p>
+                      <ul className="text-xs text-gray-300 list-disc list-inside">
+                        {detection.recommendations.slice(0, 2).map((rec, i) => (
+                          <li key={i}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center gap-3 mb-3">
+                  {analysisError ? (
+                    <>
+                      <AlertTriangle className="w-8 h-8 text-yellow-400" />
+                      <div>
+                        <h3 className="font-semibold text-lg text-white">Analysis Issue</h3>
+                        <p className="text-sm text-gray-300">{analysisError}</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-8 h-8 text-green-400" />
+                      <div>
+                        <h3 className="font-semibold text-lg text-white">No Pest Detected</h3>
+                        <p className="text-sm text-gray-300">
+                          {detection?.description || 'The image appears to be pest-free'}
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
+              )}
               
               <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
                 <span>{cropType}</span>
@@ -355,7 +479,7 @@ const FarmerCamera = () => {
                   {isProcessing ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
-                  {isOnline ? 'Upload' : 'Save Offline'}
+                  {isOnline ? 'Upload Report' : 'Save Offline'}
                 </Button>
               </div>
             </div>
@@ -383,6 +507,15 @@ const FarmerCamera = () => {
               </Select>
             </div>
 
+            {/* Target Pests Info */}
+            <div className="flex flex-wrap justify-center gap-1">
+              {TARGET_PESTS.slice(0, 4).map((pest) => (
+                <Badge key={pest} variant="outline" className="text-xs text-gray-400 border-gray-600">
+                  {pest}
+                </Badge>
+              ))}
+            </div>
+
             {/* Capture Controls */}
             <div className="flex items-center justify-center gap-6">
               {/* Auto-detect Toggle */}
@@ -397,8 +530,8 @@ const FarmerCamera = () => {
 
               {/* Capture Button */}
               <button
-                onClick={handleManualCapture}
-                disabled={!isStreaming}
+                onClick={handleCapture}
+                disabled={!isStreaming || isAnalyzing}
                 className="w-20 h-20 rounded-full bg-white border-4 border-primary flex items-center justify-center disabled:opacity-50"
               >
                 <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
@@ -411,7 +544,7 @@ const FarmerCamera = () => {
             </div>
 
             <p className="text-center text-xs text-gray-400">
-              {autoDetect ? 'Auto-detect enabled • Will capture when pest detected' : 'Tap to capture manually'}
+              {autoDetect ? 'AI auto-capture enabled • Detecting armyworm & pests' : 'Tap to capture and analyze'}
             </p>
           </div>
         </div>
