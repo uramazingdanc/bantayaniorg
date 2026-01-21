@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Loader2, Sprout, Building2 } from 'lucide-react';
+import { Mail, Lock, User, Loader2, Sprout } from 'lucide-react';
 import { BantayAniLogo } from '@/components/BantayAniLogo';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import type { UserRole } from '@/hooks/useAuth';
 
 export const AuthScreen = () => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signup');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('farmer');
+  // Signup is always farmer - admins are pre-created
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -38,10 +38,9 @@ export const AuthScreen = () => {
         await signIn(email, password);
         // Redirect will happen via useEffect once role is fetched
       } else {
-        await signUp(email, password, name, selectedRole);
-        // For signup, we know the role - redirect immediately
-        const redirectPath = selectedRole === 'lgu_admin' ? '/dashboard' : '/farmer';
-        navigate(redirectPath, { replace: true });
+        // Signup is always farmer role
+        await signUp(email, password, name, 'farmer');
+        navigate('/farmer', { replace: true });
       }
     } catch (error) {
       console.error('Auth error:', error);
@@ -90,36 +89,19 @@ export const AuthScreen = () => {
           </button>
         </div>
 
-        {/* Role Selection */}
-        <div className="mb-6">
-          <Label className="text-sm text-muted-foreground mb-3 block">Select your role</Label>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setSelectedRole('farmer')}
-              className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                selectedRole === 'farmer'
-                  ? 'bg-primary/20 border-primary text-primary shadow-glow'
-                  : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-              }`}
-            >
+        {/* Role Selection - Only show for signup, and only farmer option */}
+        {mode === 'signup' && (
+          <div className="mb-6">
+            <Label className="text-sm text-muted-foreground mb-3 block">Account type</Label>
+            <div className="flex items-center justify-center gap-2 p-4 rounded-xl border-2 bg-primary/20 border-primary text-primary">
               <Sprout className="w-5 h-5" />
-              <span className="font-medium">Farmer</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelectedRole('lgu_admin')}
-              className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 transition-all ${
-                selectedRole === 'lgu_admin'
-                  ? 'bg-primary/20 border-primary text-primary shadow-glow'
-                  : 'border-border/50 text-muted-foreground hover:border-primary/50 hover:text-foreground'
-              }`}
-            >
-              <Building2 className="w-5 h-5" />
-              <span className="font-medium">LGU Admin</span>
-            </button>
+              <span className="font-medium">Farmer Account</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              Admin accounts are managed by the LGU
+            </p>
           </div>
-        </div>
+        )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
