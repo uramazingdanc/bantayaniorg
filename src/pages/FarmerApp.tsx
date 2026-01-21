@@ -1,5 +1,5 @@
 import { useNavigate, Navigate } from 'react-router-dom';
-import { Camera, History, Bell, User, LogOut, ChevronRight, Wifi, WifiOff, CloudUpload } from 'lucide-react';
+import { Camera, History, Bell, User, LogOut, ChevronRight, Wifi, WifiOff, CloudUpload, MapPin } from 'lucide-react';
 import { BantayAniLogo } from '@/components/BantayAniLogo';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -49,24 +49,31 @@ const FarmerApp = () => {
       badge: pendingCount > 0 ? `${pendingCount} pending` : undefined,
     },
     {
+      icon: MapPin,
+      title: 'Detection Map',
+      description: 'View pest locations on map',
+      color: 'bg-primary/20 text-primary',
+      path: '/farmer/map',
+    },
+    {
       icon: History,
       title: 'Detection History',
       description: 'View past scans and results',
-      color: 'bg-blue-500/20 text-blue-400',
+      color: 'bg-secondary/50 text-secondary-foreground',
       path: '/farmer/history',
     },
     {
       icon: Bell,
       title: 'Advisories',
       description: 'LGU pest alerts and warnings',
-      color: 'bg-orange-500/20 text-orange-400',
+      color: 'bg-accent/20 text-accent-foreground',
       path: '/farmer/advisories',
     },
     {
       icon: User,
       title: 'Profile Settings',
       description: 'Update farm details',
-      color: 'bg-purple-500/20 text-purple-400',
+      color: 'bg-muted text-muted-foreground',
       path: '/farmer/profile',
     },
   ];
@@ -111,11 +118,11 @@ const FarmerApp = () => {
           <p className="text-xs text-muted-foreground">Scans</p>
         </div>
         <div className="glass-card p-3 text-center">
-          <p className="text-xl font-bold text-green-400">{stats.verified}</p>
+          <p className="text-xl font-bold text-primary">{stats.verified}</p>
           <p className="text-xs text-muted-foreground">Verified</p>
         </div>
         <div className="glass-card p-3 text-center">
-          <p className="text-xl font-bold text-yellow-400">{stats.pending}</p>
+          <p className="text-xl font-bold text-accent-foreground">{stats.pending}</p>
           <p className="text-xs text-muted-foreground">Pending</p>
         </div>
       </div>
@@ -126,8 +133,8 @@ const FarmerApp = () => {
           className="glass-card p-4 mb-6 flex items-center gap-3 cursor-pointer hover:bg-primary/5 transition-colors"
           onClick={() => navigate('/farmer/camera')}
         >
-          <div className="p-2 rounded-lg bg-yellow-500/20">
-            <CloudUpload className="w-5 h-5 text-yellow-400" />
+          <div className="p-2 rounded-lg bg-accent/20">
+            <CloudUpload className="w-5 h-5 text-accent-foreground" />
           </div>
           <div className="flex-1">
             <p className="font-medium text-foreground text-sm">
