@@ -1,21 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Loader2, Sprout } from 'lucide-react';
+import { Mail, Lock, User, Loader2, HelpCircle } from 'lucide-react';
 import { BantayAniLogo } from '@/components/BantayAniLogo';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import type { UserRole } from '@/hooks/useAuth';
+import { Checkbox } from '@/components/ui/checkbox';
 
 export const AuthScreen = () => {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
-  // Signup is always farmer - admins are pre-created
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [pendingAuth, setPendingAuth] = useState(false);
   
   const { signIn, signUp, isAuthenticated, role, isLoading } = useAuthContext();
   const navigate = useNavigate();
@@ -30,11 +30,15 @@ export const AuthScreen = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!agreedToTerms) {
+      return;
+    }
+    
     setIsSubmitting(true);
-    setPendingAuth(true);
     
     try {
-      if (mode === 'signin') {
+      if (mode === 'signin' || showAdminLogin) {
         await signIn(email, password);
         // Redirect will happen via useEffect once role is fetched
       } else {
@@ -44,10 +48,21 @@ export const AuthScreen = () => {
       }
     } catch (error) {
       console.error('Auth error:', error);
-      setPendingAuth(false);
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const resetForm = () => {
+    setEmail('');
+    setPassword('');
+    setName('');
+    setAgreedToTerms(false);
+  };
+
+  const toggleAdminLogin = () => {
+    setShowAdminLogin(!showAdminLogin);
+    resetForm();
   };
 
   return (
@@ -63,49 +78,17 @@ export const AuthScreen = () => {
           <BantayAniLogo size="lg" />
         </div>
 
-        {/* Mode Toggle */}
-        <div className="flex mb-8 p-1 bg-muted/50 rounded-lg">
-          <button
-            type="button"
-            onClick={() => setMode('signin')}
-            className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
-              mode === 'signin'
-                ? 'bg-primary text-primary-foreground shadow-lg'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('signup')}
-            className={`flex-1 py-2.5 px-4 rounded-md text-sm font-medium transition-all ${
-              mode === 'signup'
-                ? 'bg-primary text-primary-foreground shadow-lg'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Sign Up
-          </button>
-        </div>
-
-        {/* Role Selection - Only show for signup, and only farmer option */}
-        {mode === 'signup' && (
-          <div className="mb-6">
-            <Label className="text-sm text-muted-foreground mb-3 block">Account type</Label>
-            <div className="flex items-center justify-center gap-2 p-4 rounded-xl border-2 bg-primary/20 border-primary text-primary">
-              <Sprout className="w-5 h-5" />
-              <span className="font-medium">Farmer Account</span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              Admin accounts are managed by the LGU
-            </p>
+        {/* Admin Login Badge */}
+        {showAdminLogin && (
+          <div className="mb-6 p-3 rounded-lg bg-accent/20 border border-accent/50 text-center">
+            <span className="text-accent-foreground text-sm font-medium">LGU Admin Access</span>
           </div>
         )}
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {mode === 'signup' && (
+          {/* Name field - only for signup */}
+          {mode === 'signup' && !showAdminLogin && (
             <div className="space-y-2">
               <Label htmlFor="name" className="text-sm text-muted-foreground">
                 Full Name
@@ -129,81 +112,123 @@ export const AuthScreen = () => {
             <Label htmlFor="email" className="text-sm text-muted-foreground">
               Email Address
             </Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="pl-11 h-12 input-dark"
-                required
-              />
-            </div>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="h-12 input-dark"
+              required
+            />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm text-muted-foreground">
-              Password
-            </Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="pl-11 h-12 input-dark"
-                required
-                minLength={6}
-              />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-sm text-muted-foreground">
+                Password
+              </Label>
+              {(mode === 'signin' || showAdminLogin) && (
+                <button
+                  type="button"
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot Password?
+                </button>
+              )}
             </div>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="h-12 input-dark"
+              required
+              minLength={6}
+            />
+          </div>
+
+          {/* Terms and Conditions */}
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="terms"
+              checked={agreedToTerms}
+              onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
+              className="border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+            <label
+              htmlFor="terms"
+              className="text-sm text-muted-foreground cursor-pointer"
+            >
+              I agree to the{' '}
+              <a href="#" className="text-primary hover:underline">
+                Terms and Conditions
+              </a>
+            </label>
           </div>
 
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !agreedToTerms}
             className="w-full h-12 text-base font-semibold btn-primary-glow"
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                {mode === 'signup' ? 'Creating account...' : 'Signing in...'}
+                {showAdminLogin || mode === 'signin' ? 'Signing in...' : 'Creating account...'}
               </>
             ) : (
-              mode === 'signup' ? 'Create Account' : 'Sign In'
+              showAdminLogin || mode === 'signin' ? 'Sign In' : 'Sign Up'
             )}
           </Button>
         </form>
 
-        {/* Footer */}
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          {mode === 'signin' ? (
-            <>
-              Don't have an account?{' '}
-              <button
-                type="button"
-                onClick={() => setMode('signup')}
-                className="text-primary hover:underline font-medium"
-              >
-                Sign up
-              </button>
-            </>
-          ) : (
-            <>
-              Already have an account?{' '}
-              <button
-                type="button"
-                onClick={() => setMode('signin')}
-                className="text-primary hover:underline font-medium"
-              >
-                Sign in
-              </button>
-            </>
-          )}
-        </p>
+        {/* Toggle Sign In / Sign Up - only show when not in admin login */}
+        {!showAdminLogin && (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            {mode === 'signin' ? (
+              <>
+                Don't have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setMode('signup'); resetForm(); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign Up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setMode('signin'); resetForm(); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign In
+                </button>
+              </>
+            )}
+          </p>
+        )}
+
+        {/* Help / User Guide */}
+        <div className="mt-4 flex items-center justify-center gap-1 text-sm text-muted-foreground">
+          <HelpCircle className="w-4 h-4" />
+          <span>Help / User Guide</span>
+        </div>
+
+        {/* Admin Access Link */}
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={toggleAdminLogin}
+            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+          >
+            {showAdminLogin ? '← Back to User Login' : 'Admin Access →'}
+          </button>
+        </div>
       </div>
     </div>
   );
