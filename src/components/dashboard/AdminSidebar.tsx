@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { BantayAniLogo } from '@/components/BantayAniLogo';
-import { useAuthStore } from '@/store/authStore';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -24,11 +24,11 @@ const navItems = [
 
 export const AdminSidebar = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const { logout, user } = useAuthStore();
+  const { signOut, profile } = useAuthContext();
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await signOut();
     navigate('/');
   };
 
@@ -76,10 +76,10 @@ export const AdminSidebar = () => {
 
       {/* User & Logout */}
       <div className="p-3 border-t border-sidebar-border space-y-2">
-        {!collapsed && user && (
+        {!collapsed && profile && (
           <div className="px-3 py-2 mb-2">
-            <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+            <p className="text-sm font-medium text-foreground truncate">{profile.name}</p>
+            <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
           </div>
         )}
         
