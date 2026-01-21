@@ -137,16 +137,23 @@ export function useAuth() {
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error(error.message);
-      throw error;
+    try {
+      const { error } = await supabase.auth.signOut();
+      // Ignore session_not_found errors - the session is already gone
+      if (error && !error.message.includes('session_not_found') && !error.message.includes('Session not found')) {
+        console.error('Sign out error:', error);
+      }
+    } catch (err) {
+      // Silently handle any errors during signout
+      console.error('Sign out exception:', err);
+    } finally {
+      // Always clear local state regardless of signOut result
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      setRole(null);
+      toast.success('Signed out successfully');
     }
-    setUser(null);
-    setSession(null);
-    setProfile(null);
-    setRole(null);
-    toast.success('Signed out successfully');
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
