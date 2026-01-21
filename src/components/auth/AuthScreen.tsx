@@ -8,14 +8,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 
+// Only this email can sign up as admin
+const ADMIN_EMAIL = 'bantayaniph@gmail.com';
+
 export const AuthScreen = () => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminMode, setAdminMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [adminError, setAdminError] = useState('');
   
   const { signIn, signUp, isAuthenticated, role, isLoading } = useAuthContext();
   const navigate = useNavigate();
@@ -36,15 +41,33 @@ export const AuthScreen = () => {
     }
     
     setIsSubmitting(true);
+    setAdminError('');
     
     try {
-      if (mode === 'signin' || showAdminLogin) {
-        await signIn(email, password);
-        // Redirect will happen via useEffect once role is fetched
+      if (showAdminLogin) {
+        // Admin flow
+        if (adminMode === 'signup') {
+          // Only allow admin signup for the designated email
+          if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+            setAdminError('Admin registration is restricted to authorized email addresses only.');
+            setIsSubmitting(false);
+            return;
+          }
+          await signUp(email, password, name, 'lgu_admin');
+          navigate('/dashboard', { replace: true });
+        } else {
+          await signIn(email, password);
+          // Redirect will happen via useEffect once role is fetched
+        }
       } else {
-        // Signup is always farmer role
-        await signUp(email, password, name, 'farmer');
-        navigate('/farmer', { replace: true });
+        // Farmer flow
+        if (mode === 'signin') {
+          await signIn(email, password);
+          // Redirect will happen via useEffect once role is fetched
+        } else {
+          await signUp(email, password, name, 'farmer');
+          navigate('/farmer', { replace: true });
+        }
       }
     } catch (error) {
       console.error('Auth error:', error);
@@ -62,6 +85,8 @@ export const AuthScreen = () => {
 
   const toggleAdminLogin = () => {
     setShowAdminLogin(!showAdminLogin);
+    setAdminMode('signin');
+    setAdminError('');
     resetForm();
   };
 
@@ -85,10 +110,17 @@ export const AuthScreen = () => {
           </div>
         )}
 
+        {/* Admin Error Message */}
+        {adminError && (
+          <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/50 text-center">
+            <span className="text-destructive text-sm">{adminError}</span>
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Name field - only for signup */}
-          {mode === 'signup' && !showAdminLogin && (
+          {/* Name field - for farmer signup OR admin signup */}
+          {((mode === 'signup' && !showAdminLogin) || (showAdminLogin && adminMode === 'signup')) && (
             <div className="space-y-2">
               <Label htmlFor="name" className="text-sm text-muted-foreground">
                 Full Name
@@ -128,7 +160,7 @@ export const AuthScreen = () => {
               <Label htmlFor="password" className="text-sm text-muted-foreground">
                 Password
               </Label>
-              {(mode === 'signin' || showAdminLogin) && (
+              {((mode === 'signin' && !showAdminLogin) || (showAdminLogin && adminMode === 'signin')) && (
                 <button
                   type="button"
                   className="text-sm text-primary hover:underline"
@@ -176,16 +208,47 @@ export const AuthScreen = () => {
             {isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                {showAdminLogin || mode === 'signin' ? 'Signing in...' : 'Creating account...'}
+                {showAdminLogin 
+                  ? (adminMode === 'signin' ? 'Signing in...' : 'Creating admin account...')
+                  : (mode === 'signin' ? 'Signing in...' : 'Creating account...')
+                }
               </>
             ) : (
-              showAdminLogin || mode === 'signin' ? 'Sign In' : 'Sign Up'
+              showAdminLogin 
+                ? (adminMode === 'signin' ? 'Sign In' : 'Create Admin Account')
+                : (mode === 'signin' ? 'Sign In' : 'Sign Up')
             )}
           </Button>
         </form>
 
-        {/* Toggle Sign In / Sign Up - only show when not in admin login */}
-        {!showAdminLogin && (
+        {/* Toggle Sign In / Sign Up */}
+        {showAdminLogin ? (
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            {adminMode === 'signin' ? (
+              <>
+                Need to create admin account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setAdminMode('signup'); setAdminError(''); resetForm(); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign Up
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an admin account?{' '}
+                <button
+                  type="button"
+                  onClick={() => { setAdminMode('signin'); setAdminError(''); resetForm(); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Sign In
+                </button>
+              </>
+            )}
+          </p>
+        ) : (
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {mode === 'signin' ? (
               <>
