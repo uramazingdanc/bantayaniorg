@@ -1,8 +1,9 @@
-import { Map as MapIcon, AlertCircle } from 'lucide-react';
-import { useDetectionStore } from '@/store/detectionStore';
+import { Map as MapIcon, AlertCircle, Loader2 } from 'lucide-react';
+import { useDetections } from '@/hooks/useDetections';
+import PestDetectionMap from '@/components/map/PestDetectionMap';
 
 const GISMap = () => {
-  const { detections } = useDetectionStore();
+  const { detections, isLoading } = useDetections(true); // Admin sees all detections
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -10,58 +11,70 @@ const GISMap = () => {
       <div>
         <h1 className="text-2xl font-bold text-foreground">GIS Map</h1>
         <p className="text-muted-foreground">
-          Geographic distribution of pest detections
+          Geographic distribution of pest detections across all farms
         </p>
       </div>
 
       {/* Map Container */}
       <div className="glass-card p-1 h-[600px] relative overflow-hidden">
-        {/* Placeholder Map */}
-        <div className="absolute inset-0 bg-gradient-to-br from-muted/20 to-muted/40 flex items-center justify-center">
-          <div className="text-center">
-            <MapIcon className="w-16 h-16 text-primary/50 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">
-              Interactive GIS Map
-            </h3>
-            <p className="text-sm text-muted-foreground max-w-md">
-              This area will display an interactive map with pest detection markers.
-              Integration with Mapbox or Leaflet required.
-            </p>
+        {isLoading ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-background/50">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              <span className="text-muted-foreground">Loading detections...</span>
+            </div>
+          </div>
+        ) : (
+          <PestDetectionMap
+            detections={detections}
+            height="100%"
+            isAdmin={true}
+            showWeather={true}
+          />
+        )}
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 text-accent-foreground" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Pending Review</p>
+              <p className="text-xl font-bold text-foreground">
+                {detections.filter((d) => d.status === 'pending').length}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+              <MapIcon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Verified Outbreaks</p>
+              <p className="text-xl font-bold text-foreground">
+                {detections.filter((d) => d.status === 'verified').length}
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Detection Markers Legend */}
-        <div className="absolute bottom-4 left-4 glass-card p-3 z-10">
-          <h4 className="text-xs font-semibold text-foreground mb-2">
-            Detection Points
-          </h4>
-          <div className="space-y-1.5">
-            {detections.slice(0, 4).map((d) => (
-              <div key={d.id} className="flex items-center gap-2 text-xs">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    d.status === 'verified'
-                      ? 'bg-primary'
-                      : d.status === 'rejected'
-                      ? 'bg-destructive'
-                      : 'bg-yellow-500'
-                  }`}
-                />
-                <span className="text-muted-foreground">
-                  {d.pestType} - {d.cropType}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Stats Overlay */}
-        <div className="absolute top-4 right-4 glass-card p-3 z-10">
-          <div className="flex items-center gap-2 text-sm">
-            <AlertCircle className="w-4 h-4 text-primary" />
-            <span className="font-medium text-foreground">
-              {detections.length} Active Detection Points
-            </span>
+        <div className="glass-card p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-muted/50 flex items-center justify-center">
+              <MapIcon className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Locations</p>
+              <p className="text-xl font-bold text-foreground">
+                {detections.filter((d) => d.latitude && d.longitude).length}
+              </p>
+            </div>
           </div>
         </div>
       </div>

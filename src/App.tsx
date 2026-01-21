@@ -18,6 +18,7 @@ import FarmerProfile from "./pages/farmer/FarmerProfile";
 import FarmerHistory from "./pages/farmer/FarmerHistory";
 import FarmerCamera from "./pages/farmer/FarmerCamera";
 import FarmerAdvisories from "./pages/farmer/FarmerAdvisories";
+import FarmerMap from "./pages/farmer/FarmerMap";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['farmer']}>
                   <FarmerAdvisories />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farmer/map"
+              element={
+                <ProtectedRoute allowedRoles={['farmer']}>
+                  <FarmerMap />
                 </ProtectedRoute>
               }
             />
