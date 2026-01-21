@@ -1,32 +1,35 @@
-import { Shield } from 'lucide-react';
+import logoImage from '@/assets/bantayani-logo.png';
 
 interface BantayAniLogoProps {
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   showText?: boolean;
 }
 
-export const BantayAniLogo = ({ size = 'md', showText = true }: BantayAniLogoProps) => {
+export const BantayAniLogo = ({ size = 'md', showText = false }: BantayAniLogoProps) => {
   const sizeClasses = {
     sm: 'w-8 h-8',
-    md: 'w-10 h-10',
-    lg: 'w-14 h-14',
+    md: 'w-12 h-12',
+    lg: 'w-16 h-16',
+    xl: 'w-24 h-24',
   };
 
   const textSizes = {
     sm: 'text-lg',
     md: 'text-xl',
     lg: 'text-2xl',
+    xl: 'text-3xl',
   };
 
   return (
     <div className="flex items-center gap-3">
-      <div className={`${sizeClasses[size]} relative flex items-center justify-center`}>
-        <div className="absolute inset-0 bg-primary/20 rounded-lg blur-lg animate-pulse-slow" />
-        <Shield className={`${sizeClasses[size]} text-primary relative z-10`} strokeWidth={1.5} />
-      </div>
+      <img 
+        src={logoImage} 
+        alt="BantayAni Logo" 
+        className={`${sizeClasses[size]} object-contain`}
+      />
       {showText && (
         <div className="flex flex-col">
-          <span className={`${textSizes[size]} font-bold text-foreground glow-text`}>
+          <span className={`${textSizes[size]} font-bold text-foreground`}>
             BantayAni
           </span>
           {size !== 'sm' && (
