@@ -48,6 +48,8 @@ Deno.serve(async (req) => {
       longitude?: number;
       location_name?: string;
       image_base64?: string;
+      farmer_notes?: string;
+      farm_id?: string;
     };
 
     const contentType = req.headers.get("content-type") || "";
@@ -132,6 +134,8 @@ Deno.serve(async (req) => {
         latitude: detectionData.latitude,
         longitude: detectionData.longitude,
         location_name: detectionData.location_name,
+        farmer_notes: detectionData.farmer_notes,
+        farm_id: detectionData.farm_id,
         status: "pending",
       })
       .select()

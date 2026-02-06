@@ -26,14 +26,26 @@ export function useFarmers() {
     try {
       setIsLoading(true);
       
-      // Get all profiles with farmer role
+      // First, get all user_ids with farmer role
+      const { data: farmerRoles, error: rolesError } = await supabase
+        .from('user_roles')
+        .select('user_id')
+        .eq('role', 'farmer');
+
+      if (rolesError) throw rolesError;
+
+      if (!farmerRoles || farmerRoles.length === 0) {
+        setFarmers([]);
+        return;
+      }
+
+      const farmerUserIds = farmerRoles.map(r => r.user_id);
+
+      // Get profiles for these farmers
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select(`
-          *,
-          user_roles!inner (role)
-        `)
-        .eq('user_roles.role', 'farmer');
+        .select('*')
+        .in('user_id', farmerUserIds);
 
       if (profilesError) throw profilesError;
 

@@ -15,13 +15,20 @@ import {
   Send,
   Navigation,
   X,
+  Flashlight,
+  FlashlightOff,
+  Upload,
+  ImagePlus,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useDetections } from '@/hooks/useDetections';
+import { useFarmerFarms } from '@/hooks/useFarmerFarms';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -53,13 +60,19 @@ interface DetectionResult {
   confidence: number;
 }
 
+interface CapturedImage {
+  id: string;
+  dataUrl: string;
+  detection?: DetectionResult;
+}
+
 interface ReportData {
   location: LocationData | null;
-  imageDataUrl: string | null;
+  images: CapturedImage[];
   cropType: string;
-  detection: DetectionResult | null;
-  notes: string;
+  farmerNotes: string;
   timestamp: string;
+  selectedFarmNumber: number | null;
 }
 
 export const PestScanFlow = () => {
@@ -67,20 +80,25 @@ export const PestScanFlow = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Flow state
   const [currentStep, setCurrentStep] = useState<ScanStep>('location');
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  // Camera controls
+  const [flashEnabled, setFlashEnabled] = useState(false);
+  const [flashSupported, setFlashSupported] = useState(false);
+
   // Report data
   const [reportData, setReportData] = useState<ReportData>({
     location: null,
-    imageDataUrl: null,
+    images: [],
     cropType: 'Rice',
-    detection: null,
-    notes: '',
+    farmerNotes: '',
     timestamp: '',
+    selectedFarmNumber: null,
   });
 
   // UI states
@@ -91,6 +109,7 @@ export const PestScanFlow = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { uploadDetection } = useDetections();
+  const { farms, isLoading: farmsLoading } = useFarmerFarms();
 
   // Monitor online status
   useEffect(() => {
@@ -161,20 +180,60 @@ export const PestScanFlow = () => {
     }
   }, []);
 
+  // Use farm location instead of GPS
+  const useFarmLocation = (farmNumber: number) => {
+    const farm = farms.find(f => f.farm_number === farmNumber);
+    if (farm && farm.latitude && farm.longitude) {
+      setReportData(prev => ({
+        ...prev,
+        location: {
+          latitude: farm.latitude!,
+          longitude: farm.longitude!,
+          accuracy: 0,
+        },
+        selectedFarmNumber: farmNumber,
+      }));
+      toast.success(`Using ${farm.farm_name || `Farm ${farmNumber}`} location`);
+      setCurrentStep('camera');
+    } else {
+      toast.error('This farm has no GPS coordinates saved');
+    }
+  };
+
   // Step 2: Start Camera
   const startCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } },
-      });
+      const constraints: MediaStreamConstraints = {
+        video: { 
+          facingMode: 'environment', 
+          width: { ideal: 1920 }, 
+          height: { ideal: 1080 } 
+        },
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsStreaming(true);
+
+        // Check if torch/flash is supported
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities?.();
+        if (capabilities && 'torch' in capabilities) {
+          setFlashSupported(true);
+        }
       }
-    } catch (error) {
-      toast.error('Unable to access camera. Please grant camera permission.');
+    } catch (error: any) {
       console.error('Camera error:', error);
+      if (error.name === 'NotAllowedError') {
+        toast.error('Camera access denied. Please allow camera permission in your browser settings.');
+      } else if (error.name === 'NotFoundError') {
+        toast.error('No camera found on this device.');
+      } else {
+        toast.error('Unable to access camera. Please check your permissions.');
+      }
     }
   }, []);
 
@@ -183,8 +242,24 @@ export const PestScanFlow = () => {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
       setIsStreaming(false);
+      setFlashEnabled(false);
     }
   }, []);
+
+  // Toggle flash
+  const toggleFlash = useCallback(async () => {
+    if (!streamRef.current) return;
+    
+    const track = streamRef.current.getVideoTracks()[0];
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: !flashEnabled } as any]
+      });
+      setFlashEnabled(!flashEnabled);
+    } catch (error) {
+      toast.error('Flash not supported on this device');
+    }
+  }, [flashEnabled]);
 
   // Start camera when entering camera step
   useEffect(() => {
@@ -210,44 +285,97 @@ export const PestScanFlow = () => {
     ctx.drawImage(video, 0, 0);
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    const newImage: CapturedImage = {
+      id: crypto.randomUUID(),
+      dataUrl,
+    };
 
     setReportData(prev => ({
       ...prev,
-      imageDataUrl: dataUrl,
+      images: [...prev.images, newImage],
       timestamp: new Date().toISOString(),
     }));
 
-    // Stop camera and start "AI" processing
+    toast.success('Photo captured!');
+  }, []);
+
+  // Handle file upload for bulk images
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        const newImage: CapturedImage = {
+          id: crypto.randomUUID(),
+          dataUrl,
+        };
+        setReportData(prev => ({
+          ...prev,
+          images: [...prev.images, newImage],
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    toast.success(`${files.length} image(s) added`);
+    e.target.value = ''; // Reset input
+  }, []);
+
+  // Remove image
+  const removeImage = (imageId: string) => {
+    setReportData(prev => ({
+      ...prev,
+      images: prev.images.filter(img => img.id !== imageId),
+    }));
+  };
+
+  // Proceed to diagnosis
+  const proceedToDiagnosis = () => {
+    if (reportData.images.length === 0) {
+      toast.error('Please capture or upload at least one image');
+      return;
+    }
     stopCamera();
-    processImage();
-  }, [stopCamera]);
+    processImages();
+  };
 
   // Step 3: Mock AI Processing
-  const processImage = useCallback(() => {
+  const processImages = useCallback(() => {
     setIsProcessing(true);
 
     // Simulate AI analysis with a delay
     setTimeout(() => {
-      const randomPest = MOCK_PESTS[Math.floor(Math.random() * MOCK_PESTS.length)];
-      const confidence = 0.75 + Math.random() * 0.20; // 75-95% confidence
+      const updatedImages = reportData.images.map(img => {
+        const randomPest = MOCK_PESTS[Math.floor(Math.random() * MOCK_PESTS.length)];
+        const confidence = 0.75 + Math.random() * 0.20;
+        return {
+          ...img,
+          detection: {
+            pest: randomPest.name,
+            scientific_name: randomPest.scientific,
+            confidence,
+          },
+        };
+      });
 
       setReportData(prev => ({
         ...prev,
-        detection: {
-          pest: randomPest.name,
-          scientific_name: randomPest.scientific,
-          confidence,
-        },
+        images: updatedImages,
       }));
 
       setIsProcessing(false);
       setCurrentStep('diagnosis');
     }, 2500);
-  }, []);
+  }, [reportData.images]);
 
   // Step 4: Submit Report
   const submitReport = useCallback(async () => {
-    if (!reportData.location || !reportData.imageDataUrl || !reportData.detection) {
+    if (!reportData.location || reportData.images.length === 0) {
       toast.error('Missing required data');
       return;
     }
@@ -255,14 +383,20 @@ export const PestScanFlow = () => {
     setIsSubmitting(true);
 
     try {
-      await uploadDetection({
-        pest_type: reportData.detection.pest,
-        confidence: reportData.detection.confidence,
-        crop_type: reportData.cropType,
-        latitude: reportData.location.latitude,
-        longitude: reportData.location.longitude,
-        image_base64: reportData.imageDataUrl,
-      });
+      // Submit each image as a separate detection
+      for (const image of reportData.images) {
+        if (!image.detection) continue;
+        
+        await uploadDetection({
+          pest_type: image.detection.pest,
+          confidence: image.detection.confidence,
+          crop_type: reportData.cropType,
+          latitude: reportData.location.latitude,
+          longitude: reportData.location.longitude,
+          image_base64: image.dataUrl,
+          farmer_notes: reportData.farmerNotes,
+        });
+      }
 
       setCurrentStep('success');
     } catch (error) {
@@ -277,12 +411,11 @@ export const PestScanFlow = () => {
     }
   }, [reportData, uploadDetection]);
 
-  // Retake photo
-  const retakePhoto = () => {
+  // Retake photos
+  const retakePhotos = () => {
     setReportData(prev => ({
       ...prev,
-      imageDataUrl: null,
-      detection: null,
+      images: [],
     }));
     setCurrentStep('camera');
   };
@@ -291,11 +424,11 @@ export const PestScanFlow = () => {
   const resetFlow = () => {
     setReportData({
       location: null,
-      imageDataUrl: null,
+      images: [],
       cropType: 'Rice',
-      detection: null,
-      notes: '',
+      farmerNotes: '',
       timestamp: '',
+      selectedFarmNumber: null,
     });
     setCurrentStep('location');
     setLocationError(null);
@@ -347,9 +480,9 @@ export const PestScanFlow = () => {
               <MapPin className="w-16 h-16 text-primary" />
             </div>
 
-            <h2 className="text-2xl font-bold text-center mb-2">Enable Location</h2>
+            <h2 className="text-2xl font-bold text-center mb-2">Select Location</h2>
             <p className="text-muted-foreground text-center mb-8 max-w-sm">
-              We need your farm coordinates to track pest outbreaks accurately across the region.
+              Choose your farm location or use GPS to track the pest outbreak.
             </p>
 
             <div className="w-full max-w-sm space-y-4">
@@ -367,6 +500,43 @@ export const PestScanFlow = () => {
                 </SelectContent>
               </Select>
 
+              {/* Farm Location Options */}
+              {farms.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-sm text-muted-foreground">Use saved farm location:</Label>
+                  <div className="grid gap-2">
+                    {farms.map((farm) => (
+                      <Button
+                        key={farm.id}
+                        variant="outline"
+                        className="w-full justify-start h-auto py-3"
+                        onClick={() => useFarmLocation(farm.farm_number)}
+                        disabled={!farm.latitude || !farm.longitude}
+                      >
+                        <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold mr-3">
+                          {farm.farm_number}
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium">{farm.farm_name || `Farm ${farm.farm_number}`}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {farm.address || (farm.latitude ? `${farm.latitude.toFixed(4)}, ${farm.longitude?.toFixed(4)}` : 'No GPS saved')}
+                          </p>
+                        </div>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+
               <Button
                 className="w-full h-14 text-lg btn-primary-glow"
                 onClick={requestLocation}
@@ -380,7 +550,7 @@ export const PestScanFlow = () => {
                 ) : (
                   <>
                     <Navigation className="w-5 h-5 mr-2" />
-                    Enable GPS & Continue
+                    Use Current GPS Location
                   </>
                 )}
               </Button>
@@ -414,32 +584,110 @@ export const PestScanFlow = () => {
               </div>
             )}
 
-            {/* Location Badge */}
-            {reportData.location && (
-              <div className="absolute top-16 left-4 right-4">
+            {/* Top Controls */}
+            <div className="absolute top-16 left-4 right-4 flex justify-between items-start">
+              {/* Location Badge */}
+              {reportData.location && (
                 <Badge variant="secondary" className="bg-background/80 backdrop-blur">
                   <MapPin className="w-3 h-3 mr-1" />
-                  {reportData.location.latitude.toFixed(4)}, {reportData.location.longitude.toFixed(4)}
+                  {reportData.selectedFarmNumber 
+                    ? `Farm ${reportData.selectedFarmNumber}`
+                    : `${reportData.location.latitude.toFixed(4)}, ${reportData.location.longitude.toFixed(4)}`
+                  }
                 </Badge>
+              )}
+              
+              {/* Flash Toggle */}
+              <Button
+                variant="secondary"
+                size="icon"
+                className="bg-background/80 backdrop-blur"
+                onClick={toggleFlash}
+              >
+                {flashEnabled ? (
+                  <Flashlight className="w-5 h-5 text-yellow-400" />
+                ) : (
+                  <FlashlightOff className="w-5 h-5" />
+                )}
+              </Button>
+            </div>
+
+            {/* Captured Images Preview */}
+            {reportData.images.length > 0 && (
+              <div className="absolute top-28 left-4 right-4">
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {reportData.images.map((img) => (
+                    <div key={img.id} className="relative flex-shrink-0">
+                      <img 
+                        src={img.dataUrl} 
+                        alt="Captured" 
+                        className="w-16 h-16 rounded-lg object-cover border-2 border-white"
+                      />
+                      <button
+                        onClick={() => removeImage(img.id)}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
+                      >
+                        <X className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Capture Button */}
+            {/* Bottom Controls */}
             <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4">
               <p className="text-white text-sm bg-black/50 px-4 py-2 rounded-full flex items-center gap-2">
                 <Bug className="w-4 h-4" />
-                Position the pest in the frame
+                {reportData.images.length === 0 
+                  ? 'Position the pest in the frame'
+                  : `${reportData.images.length} image(s) captured`
+                }
               </p>
 
-              <button
-                onClick={capturePhoto}
-                disabled={!isStreaming}
-                className="w-20 h-20 rounded-full bg-white border-4 border-primary flex items-center justify-center disabled:opacity-50 shadow-lg"
-              >
-                <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
-                  <Camera className="w-8 h-8 text-primary-foreground" />
-                </div>
-              </button>
+              <div className="flex items-center gap-4">
+                {/* Upload Button */}
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-14 h-14 rounded-full bg-white/20 backdrop-blur flex items-center justify-center"
+                >
+                  <ImagePlus className="w-6 h-6 text-white" />
+                </button>
+
+                {/* Capture Button */}
+                <button
+                  onClick={capturePhoto}
+                  disabled={!isStreaming}
+                  className="w-20 h-20 rounded-full bg-white border-4 border-primary flex items-center justify-center disabled:opacity-50 shadow-lg"
+                >
+                  <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
+                    <Camera className="w-8 h-8 text-primary-foreground" />
+                  </div>
+                </button>
+
+                {/* Proceed Button */}
+                <button
+                  onClick={proceedToDiagnosis}
+                  disabled={reportData.images.length === 0}
+                  className={cn(
+                    "w-14 h-14 rounded-full flex items-center justify-center",
+                    reportData.images.length > 0 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-white/20 backdrop-blur text-white/50"
+                  )}
+                >
+                  <ArrowRight className="w-6 h-6" />
+                </button>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleFileUpload}
+                className="hidden"
+              />
             </div>
 
             <canvas ref={canvasRef} className="hidden" />
@@ -453,92 +701,92 @@ export const PestScanFlow = () => {
               <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                 <Loader2 className="w-12 h-12 text-primary animate-spin" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Analyzing Image...</h3>
+              <h3 className="text-xl font-semibold mb-2">Analyzing {reportData.images.length} Image(s)...</h3>
               <p className="text-muted-foreground">AI is detecting pest species</p>
             </div>
           </div>
         )}
 
         {/* STEP 3: DIAGNOSIS */}
-        {currentStep === 'diagnosis' && reportData.imageDataUrl && reportData.detection && (
-          <div className="flex-1 flex flex-col p-4 animate-fade-in">
+        {currentStep === 'diagnosis' && reportData.images.length > 0 && (
+          <div className="flex-1 flex flex-col p-4 animate-fade-in overflow-y-auto">
             <StepIndicator />
             
-            <div className="flex-1 flex flex-col lg:flex-row gap-4">
-              {/* Captured Image */}
-              <div className="lg:w-1/2">
-                <div className="relative rounded-xl overflow-hidden aspect-[4/3]">
-                  <img
-                    src={reportData.imageDataUrl}
-                    alt="Captured"
-                    className="w-full h-full object-cover"
-                  />
-                  <Badge className="absolute top-3 left-3 bg-primary">
-                    {reportData.cropType}
-                  </Badge>
+            <div className="flex-1 space-y-4">
+              {/* Images with Detection Results */}
+              {reportData.images.map((img, index) => (
+                <div key={img.id} className="glass-card p-4">
+                  <div className="flex gap-4">
+                    <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0">
+                      <img
+                        src={img.dataUrl}
+                        alt={`Captured ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    {img.detection && (
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg">{img.detection.pest}</h3>
+                        <p className="text-sm text-muted-foreground italic">
+                          {img.detection.scientific_name}
+                        </p>
+                        <Badge variant="outline" className="mt-2 text-primary border-primary">
+                          {Math.round(img.detection.confidence * 100)}% Confidence
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* Location & Crop Info */}
+              <div className="glass-card p-4">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <MapPin className="w-4 h-4" />
+                    <span>
+                      {reportData.selectedFarmNumber 
+                        ? `Farm ${reportData.selectedFarmNumber}`
+                        : `${reportData.location?.latitude.toFixed(4)}, ${reportData.location?.longitude.toFixed(4)}`
+                      }
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{reportData.cropType}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Detection Result */}
-              <div className="lg:w-1/2 space-y-4">
-                <div className="glass-card p-4">
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center">
-                      <Bug className="w-6 h-6 text-green-500" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-bold text-lg">{reportData.detection.pest}</h3>
-                      <p className="text-sm text-muted-foreground italic">
-                        {reportData.detection.scientific_name}
-                      </p>
-                      <Badge variant="outline" className="mt-2 text-primary border-primary">
-                        {Math.round(reportData.detection.confidence * 100)}% Confidence
-                      </Badge>
-                    </div>
-                  </div>
+              {/* Farmer Notes */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Additional Comments (Optional)</Label>
+                <Textarea
+                  placeholder="Describe what you observed, crop condition, or any other details..."
+                  value={reportData.farmerNotes}
+                  onChange={(e) => setReportData(prev => ({ ...prev, farmerNotes: e.target.value }))}
+                  rows={3}
+                />
+              </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      <span>
-                        {reportData.location?.latitude.toFixed(4)}, {reportData.location?.longitude.toFixed(4)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>{new Date().toLocaleDateString()}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Additional Notes (Optional)</label>
-                  <Textarea
-                    placeholder="Add any observations about the pest or crop condition..."
-                    value={reportData.notes}
-                    onChange={(e) => setReportData(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={3}
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={retakePhoto}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Retake
-                  </Button>
-                  <Button
-                    className="flex-1 btn-primary-glow"
-                    onClick={submitReport}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Send className="w-4 h-4 mr-2" />
-                    )}
-                    Submit Report
-                  </Button>
-                </div>
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <Button variant="outline" className="flex-1" onClick={retakePhotos}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Retake
+                </Button>
+                <Button
+                  className="flex-1 btn-primary-glow"
+                  onClick={submitReport}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4 mr-2" />
+                  )}
+                  Submit Report
+                </Button>
               </div>
             </div>
           </div>
@@ -555,7 +803,7 @@ export const PestScanFlow = () => {
 
             <h2 className="text-2xl font-bold text-center mb-2">Report Submitted!</h2>
             <p className="text-muted-foreground text-center mb-6 max-w-sm">
-              Your pest report has been sent to the LGU for verification.
+              Your {reportData.images.length} pest report(s) have been sent to the LGU for verification.
             </p>
 
             <Badge variant="outline" className="text-yellow-500 border-yellow-500 text-lg px-4 py-2 mb-8">
