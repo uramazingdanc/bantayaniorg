@@ -53,11 +53,55 @@ export type Database = {
         }
         Relationships: []
       }
+      farmer_farms: {
+        Row: {
+          address: string | null
+          created_at: string
+          farm_name: string | null
+          farm_number: number
+          id: string
+          landmark: string | null
+          latitude: number | null
+          longitude: number | null
+          size: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          farm_name?: string | null
+          farm_number: number
+          id?: string
+          landmark?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          size?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          farm_name?: string | null
+          farm_number?: number
+          id?: string
+          landmark?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          size?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       pest_detections: {
         Row: {
           confidence: number
           created_at: string
           crop_type: string
+          farm_id: string | null
+          farmer_notes: string | null
           id: string
           image_url: string
           latitude: number | null
@@ -75,6 +119,8 @@ export type Database = {
           confidence: number
           created_at?: string
           crop_type: string
+          farm_id?: string | null
+          farmer_notes?: string | null
           id?: string
           image_url: string
           latitude?: number | null
@@ -92,6 +138,8 @@ export type Database = {
           confidence?: number
           created_at?: string
           crop_type?: string
+          farm_id?: string | null
+          farmer_notes?: string | null
           id?: string
           image_url?: string
           latitude?: number | null
@@ -105,7 +153,15 @@ export type Database = {
           verified_at?: string | null
           verified_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pest_detections_farm_id_fkey"
+            columns: ["farm_id"]
+            isOneToOne: false
+            referencedRelation: "farmer_farms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {

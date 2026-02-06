@@ -158,9 +158,9 @@ const PestDetectionMap = ({
 
   return (
     <div className="relative rounded-xl overflow-hidden" style={{ height }}>
-      {/* Weather Overlay */}
+      {/* Weather Overlay - positioned to not cover zoom controls */}
       {showWeather && weather && (
-        <div className="absolute top-4 left-4 z-[1000] glass-card p-3 space-y-2">
+        <div className="absolute bottom-4 left-4 z-[1000] glass-card p-3 space-y-2">
           <h4 className="text-xs font-semibold text-foreground">Current Weather</h4>
           <div className="flex flex-col gap-1.5 text-xs">
             <div className="flex items-center gap-2 text-muted-foreground">

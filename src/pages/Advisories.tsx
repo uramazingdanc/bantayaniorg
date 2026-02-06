@@ -12,11 +12,15 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
@@ -41,15 +45,25 @@ const severityConfig: Record<SeverityLevel, { icon: typeof AlertCircle; color: s
   critical: { icon: Zap, color: 'text-destructive', bg: 'bg-destructive/20' },
 };
 
+// Barangay list for Bongabon
+const BARANGAYS = [
+  'Antipolo', 'Ariendo', 'Bantug', 'Calaanan', 'Commercial', 'Cruz',
+  'Digmala', 'Curva', 'Kaingin', 'Labi', 'Larcon', 'Lusok',
+  'Macabaclay', 'Magtanggol', 'Mantile', 'Olivete', 'Palo Maria',
+  'Pesa', 'Rizal', 'Sampalucan', 'San Roque', 'Santor', 'Sinipit',
+  'Sisilang na Ligaya', 'Social', 'Tugatug', 'Tulay na Bato', 'Vega Grande'
+];
+
 const Advisories = () => {
   const { advisories, isLoading, createAdvisory, toggleActive, deleteAdvisory } = useAdvisories();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedAdvisory, setSelectedAdvisory] = useState<typeof advisories[0] | null>(null);
   const [newAdvisory, setNewAdvisory] = useState({
     title: '',
     content: '',
     affectedCrops: '',
-    affectedRegions: '',
+    affectedBarangays: [] as string[],
     severity: 'medium' as SeverityLevel,
   });
 
@@ -63,14 +77,14 @@ const Advisories = () => {
         content: newAdvisory.content,
         severity: newAdvisory.severity,
         affected_crops: newAdvisory.affectedCrops.split(',').map((c) => c.trim()).filter(Boolean),
-        affected_regions: newAdvisory.affectedRegions.split(',').map((r) => r.trim()).filter(Boolean),
+        affected_regions: newAdvisory.affectedBarangays,
       });
       
       setNewAdvisory({
         title: '',
         content: '',
         affectedCrops: '',
-        affectedRegions: '',
+        affectedBarangays: [],
         severity: 'medium',
       });
       setIsOpen(false);
@@ -89,6 +103,15 @@ const Advisories = () => {
     if (confirm('Are you sure you want to delete this advisory?')) {
       await deleteAdvisory(id);
     }
+  };
+
+  const toggleBarangay = (barangay: string) => {
+    setNewAdvisory(prev => ({
+      ...prev,
+      affectedBarangays: prev.affectedBarangays.includes(barangay)
+        ? prev.affectedBarangays.filter(b => b !== barangay)
+        : [...prev.affectedBarangays, barangay]
+    }));
   };
 
   if (isLoading) {
@@ -116,108 +139,122 @@ const Advisories = () => {
               Create Advisory
             </Button>
           </DialogTrigger>
-          <DialogContent className="glass-card max-w-lg">
+          <DialogContent className="glass-card max-w-lg max-h-[90vh]">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-primary" />
                 New Advisory
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label>Title</Label>
-                <Input
-                  value={newAdvisory.title}
-                  onChange={(e) =>
-                    setNewAdvisory({ ...newAdvisory, title: e.target.value })
-                  }
-                  placeholder="Advisory title..."
-                  className="input-dark"
-                  required
-                />
-              </div>
+            <ScrollArea className="max-h-[70vh] pr-4">
+              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label>Title</Label>
+                  <Input
+                    value={newAdvisory.title}
+                    onChange={(e) =>
+                      setNewAdvisory({ ...newAdvisory, title: e.target.value })
+                    }
+                    placeholder="Advisory title..."
+                    className="input-dark"
+                    required
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label>Severity</Label>
-                <Select
-                  value={newAdvisory.severity}
-                  onValueChange={(v) =>
-                    setNewAdvisory({ ...newAdvisory, severity: v as SeverityLevel })
-                  }
-                >
-                  <SelectTrigger className="input-dark">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass-card">
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-2">
+                  <Label>Severity</Label>
+                  <Select
+                    value={newAdvisory.severity}
+                    onValueChange={(v) =>
+                      setNewAdvisory({ ...newAdvisory, severity: v as SeverityLevel })
+                    }
+                  >
+                    <SelectTrigger className="input-dark">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass-card">
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label>Affected Crops (comma separated)</Label>
-                <Input
-                  value={newAdvisory.affectedCrops}
-                  onChange={(e) =>
-                    setNewAdvisory({ ...newAdvisory, affectedCrops: e.target.value })
-                  }
-                  placeholder="Rice, Corn, Vegetables, Onion"
-                  className="input-dark"
-                  required
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label>Affected Crops (comma separated)</Label>
+                  <Input
+                    value={newAdvisory.affectedCrops}
+                    onChange={(e) =>
+                      setNewAdvisory({ ...newAdvisory, affectedCrops: e.target.value })
+                    }
+                    placeholder="Rice, Corn, Vegetables, Onion"
+                    className="input-dark"
+                    required
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label>Affected Regions (comma separated)</Label>
-                <Input
-                  value={newAdvisory.affectedRegions}
-                  onChange={(e) =>
-                    setNewAdvisory({ ...newAdvisory, affectedRegions: e.target.value })
-                  }
-                  placeholder="Davao del Sur, Davao del Norte"
-                  className="input-dark"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label>Advisory Content</Label>
-                <Textarea
-                  value={newAdvisory.content}
-                  onChange={(e) =>
-                    setNewAdvisory({ ...newAdvisory, content: e.target.value })
-                  }
-                  placeholder="Detailed advisory message for farmers..."
-                  className="input-dark min-h-[120px]"
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsOpen(false)}
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1 btn-primary-glow" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Publishing...
-                    </>
-                  ) : (
-                    'Publish Advisory'
+                <div className="space-y-2">
+                  <Label>Affected Barangays</Label>
+                  <div className="border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-2">
+                      {BARANGAYS.map((barangay) => (
+                        <label
+                          key={barangay}
+                          className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary transition-colors"
+                        >
+                          <Checkbox
+                            checked={newAdvisory.affectedBarangays.includes(barangay)}
+                            onCheckedChange={() => toggleBarangay(barangay)}
+                          />
+                          {barangay}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {newAdvisory.affectedBarangays.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Selected: {newAdvisory.affectedBarangays.join(', ')}
+                    </p>
                   )}
-                </Button>
-              </div>
-            </form>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Advisory Content</Label>
+                  <Textarea
+                    value={newAdvisory.content}
+                    onChange={(e) =>
+                      setNewAdvisory({ ...newAdvisory, content: e.target.value })
+                    }
+                    placeholder="Detailed advisory message for farmers..."
+                    className="input-dark min-h-[120px]"
+                    required
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setIsOpen(false)}
+                    disabled={isSubmitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="flex-1 btn-primary-glow" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Publishing...
+                      </>
+                    ) : (
+                      'Publish Advisory'
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </ScrollArea>
           </DialogContent>
         </Dialog>
       </div>
@@ -265,9 +302,10 @@ const Advisories = () => {
             return (
               <div
                 key={advisory.id}
-                className={`glass-card p-5 transition-all ${
+                className={`glass-card p-5 transition-all cursor-pointer hover:bg-muted/30 ${
                   !advisory.is_active ? 'opacity-60' : ''
                 }`}
+                onClick={() => setSelectedAdvisory(advisory)}
               >
                 <div className="flex items-start gap-4">
                   {/* Severity Icon */}
@@ -282,11 +320,11 @@ const Advisories = () => {
                         <h3 className="font-semibold text-foreground">
                           {advisory.title}
                         </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
+                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                           {advisory.content}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -315,7 +353,7 @@ const Advisories = () => {
                       <span className={`px-2 py-0.5 text-xs rounded-full capitalize ${config.bg} ${config.color}`}>
                         {severity}
                       </span>
-                      {advisory.affected_crops?.map((crop) => (
+                      {advisory.affected_crops?.slice(0, 3).map((crop) => (
                         <span
                           key={crop}
                           className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded-full"
@@ -323,14 +361,12 @@ const Advisories = () => {
                           {crop}
                         </span>
                       ))}
+                      {(advisory.affected_crops?.length || 0) > 3 && (
+                        <span className="px-2 py-0.5 text-xs bg-muted text-muted-foreground rounded-full">
+                          +{advisory.affected_crops.length - 3}
+                        </span>
+                      )}
                     </div>
-
-                    {/* Regions */}
-                    {advisory.affected_regions?.length > 0 && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        📍 {advisory.affected_regions.join(', ')}
-                      </p>
-                    )}
 
                     {/* Meta */}
                     <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
@@ -357,6 +393,96 @@ const Advisories = () => {
           })}
         </div>
       )}
+
+      {/* Advisory Detail Popup */}
+      <Dialog open={!!selectedAdvisory} onOpenChange={() => setSelectedAdvisory(null)}>
+        <DialogContent className="max-w-lg max-h-[80vh]">
+          {selectedAdvisory && (() => {
+            const severity = (selectedAdvisory.severity as SeverityLevel) || 'medium';
+            const config = severityConfig[severity] || severityConfig.medium;
+            const SeverityIcon = config.icon;
+            
+            return (
+              <>
+                <DialogHeader>
+                  <div className="flex items-start gap-3">
+                    <div className={`p-2 rounded-lg ${config.bg}`}>
+                      <SeverityIcon className={`w-5 h-5 ${config.color}`} />
+                    </div>
+                    <div className="flex-1">
+                      <DialogTitle className="text-left">{selectedAdvisory.title}</DialogTitle>
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <Badge className={`${config.bg} ${config.color}`}>
+                          {selectedAdvisory.severity}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDistanceToNow(new Date(selectedAdvisory.created_at), { addSuffix: true })}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          by {selectedAdvisory.creator_name || 'Admin'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </DialogHeader>
+                
+                <ScrollArea className="max-h-[50vh]">
+                  <div className="space-y-4 pr-4">
+                    {/* Full Content */}
+                    <div className="text-sm text-foreground whitespace-pre-wrap">
+                      {selectedAdvisory.content}
+                    </div>
+
+                    {/* Affected Crops */}
+                    {selectedAdvisory.affected_crops?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Affected Crops:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedAdvisory.affected_crops.map((crop: string) => (
+                            <Badge key={crop} variant="outline" className="text-xs">
+                              {crop}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Affected Barangays */}
+                    {selectedAdvisory.affected_regions?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground mb-2">Affected Barangays:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedAdvisory.affected_regions.map((region: string) => (
+                            <Badge key={region} variant="secondary" className="text-xs">
+                              {region}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+
+                <div className="flex justify-end gap-2 pt-4 border-t">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      handleToggleActive(selectedAdvisory.id, selectedAdvisory.is_active);
+                      setSelectedAdvisory(null);
+                    }}
+                  >
+                    {selectedAdvisory.is_active ? 'Deactivate' : 'Activate'}
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedAdvisory(null)}>
+                    Close
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

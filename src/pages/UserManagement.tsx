@@ -1,19 +1,36 @@
-import { useState } from 'react';
-import { Search, Mail, MapPin, Sprout, MoreVertical, UserCheck, Users, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Search, Mail, MapPin, Sprout, MoreVertical, UserCheck, Users, Loader2, Phone, Ruler } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useFarmers } from '@/hooks/useFarmers';
+import { useFarmers, Farmer } from '@/hooks/useFarmers';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+
+interface FarmerFarm {
+  id: string;
+  farm_number: number;
+  farm_name: string | null;
+  landmark: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  size: string | null;
+}
 
 const UserManagement = () => {
   const { farmers, isLoading, getStats } = useFarmers();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
+  const [farmerFarms, setFarmerFarms] = useState<FarmerFarm[]>([]);
+  const [loadingFarms, setLoadingFarms] = useState(false);
 
   const filteredFarmers = farmers.filter(
     (f) =>
@@ -23,6 +40,26 @@ const UserManagement = () => {
   );
 
   const stats = getStats();
+
+  // Fetch farmer's farms when selected
+  useEffect(() => {
+    if (selectedFarmer) {
+      setLoadingFarms(true);
+      supabase
+        .from('farmer_farms')
+        .select('*')
+        .eq('user_id', selectedFarmer.user_id)
+        .order('farm_number', { ascending: true })
+        .then(({ data, error }) => {
+          if (!error && data) {
+            setFarmerFarms(data as FarmerFarm[]);
+          }
+          setLoadingFarms(false);
+        });
+    } else {
+      setFarmerFarms([]);
+    }
+  }, [selectedFarmer]);
 
   if (isLoading) {
     return (
@@ -86,7 +123,7 @@ const UserManagement = () => {
                   Location
                 </th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">
-                  Main Crop
+                  Phone
                 </th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">
                   Reports
@@ -101,7 +138,8 @@ const UserManagement = () => {
               {filteredFarmers.map((farmer) => (
                 <tr
                   key={farmer.id}
-                  className="border-b border-border/30 hover:bg-muted/20 transition-colors"
+                  className="border-b border-border/30 hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => setSelectedFarmer(farmer)}
                 >
                   <td className="p-4">
                     <div>
@@ -119,9 +157,9 @@ const UserManagement = () => {
                     </span>
                   </td>
                   <td className="p-4">
-                    <span className="flex items-center gap-1 text-sm text-foreground">
-                      <Sprout className="w-4 h-4 text-primary" />
-                      {farmer.main_crop || 'Not set'}
+                    <span className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Phone className="w-4 h-4" />
+                      {farmer.phone || 'Not set'}
                     </span>
                   </td>
                   <td className="p-4">
@@ -144,7 +182,7 @@ const UserManagement = () => {
                       {format(new Date(farmer.created_at), 'MMM d, yyyy')}
                     </span>
                   </td>
-                  <td className="p-4">
+                  <td className="p-4" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="sm" className="w-8 h-8 p-0">
@@ -152,6 +190,9 @@ const UserManagement = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="glass-card">
+                        <DropdownMenuItem onClick={() => setSelectedFarmer(farmer)}>
+                          View Profile
+                        </DropdownMenuItem>
                         <DropdownMenuItem>View Reports</DropdownMenuItem>
                         <DropdownMenuItem>Send Message</DropdownMenuItem>
                       </DropdownMenuContent>
@@ -163,6 +204,124 @@ const UserManagement = () => {
           </table>
         </div>
       )}
+
+      {/* Farmer Detail Dialog */}
+      <Dialog open={!!selectedFarmer} onOpenChange={() => setSelectedFarmer(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh]">
+          {selectedFarmer && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-primary" />
+                  {selectedFarmer.name}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <ScrollArea className="max-h-[60vh]">
+                <div className="space-y-4 pr-4">
+                  {/* Contact Info */}
+                  <div className="glass-card p-3 space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Contact Information</p>
+                    <div className="space-y-1">
+                      <p className="text-sm text-foreground flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        {selectedFarmer.email}
+                      </p>
+                      <p className="text-sm text-foreground flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        {selectedFarmer.phone || 'Not provided'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Report Stats */}
+                  <div className="glass-card p-3">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">Report Statistics</p>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div>
+                        <p className="text-lg font-bold text-foreground">{selectedFarmer.total_reports}</p>
+                        <p className="text-xs text-muted-foreground">Total</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-green-400">{selectedFarmer.verified_reports}</p>
+                        <p className="text-xs text-muted-foreground">Verified</p>
+                      </div>
+                      <div>
+                        <p className="text-lg font-bold text-yellow-400">{selectedFarmer.pending_reports}</p>
+                        <p className="text-xs text-muted-foreground">Pending</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Farm Locations */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Farm Locations</p>
+                    {loadingFarms ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                      </div>
+                    ) : farmerFarms.length === 0 ? (
+                      <div className="glass-card p-3 text-center text-sm text-muted-foreground">
+                        No farm locations registered
+                      </div>
+                    ) : (
+                      farmerFarms.map((farm) => (
+                        <div key={farm.id} className="glass-card p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold">
+                              {farm.farm_number}
+                            </div>
+                            <p className="font-medium text-sm text-foreground">
+                              {farm.farm_name || `Farm ${farm.farm_number}`}
+                            </p>
+                          </div>
+                          <div className="space-y-1 text-xs text-muted-foreground pl-8">
+                            {farm.address && (
+                              <p className="flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                {farm.address}
+                              </p>
+                            )}
+                            {farm.landmark && (
+                              <p>Landmark: {farm.landmark}</p>
+                            )}
+                            {farm.size && (
+                              <p className="flex items-center gap-1">
+                                <Ruler className="w-3 h-3" />
+                                {farm.size}
+                              </p>
+                            )}
+                            {farm.latitude && farm.longitude && (
+                              <p>GPS: {farm.latitude.toFixed(6)}, {farm.longitude.toFixed(6)}</p>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Member Since */}
+                  <div className="glass-card p-3">
+                    <p className="text-xs font-semibold text-muted-foreground mb-1">Member Since</p>
+                    <p className="text-sm text-foreground">
+                      {format(new Date(selectedFarmer.created_at), 'MMMM d, yyyy')}
+                    </p>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button variant="outline" size="sm">
+                  View Reports
+                </Button>
+                <Button variant="outline" onClick={() => setSelectedFarmer(null)}>
+                  Close
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -1,15 +1,18 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Clock, XCircle, MapPin, Calendar, Bug, Loader2 } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, XCircle, MapPin, Calendar, Bug, Loader2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useDetections } from '@/hooks/useDetections';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { useDetections, DetectionWithProfile } from '@/hooks/useDetections';
 import { format } from 'date-fns';
 
 const FarmerHistory = () => {
   const navigate = useNavigate();
   const { detections, isLoading } = useDetections(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
+  const [selectedDetection, setSelectedDetection] = useState<DetectionWithProfile | null>(null);
 
   const filteredDetections = detections.filter(d => 
     filter === 'all' ? true : d.status === filter
@@ -88,9 +91,10 @@ const FarmerHistory = () => {
         ) : (
           <div className="space-y-3">
             {filteredDetections.map((detection) => (
-              <div 
-                key={detection.id} 
-                className="glass-card p-4 flex gap-4"
+              <button
+                key={detection.id}
+                onClick={() => setSelectedDetection(detection)}
+                className="w-full text-left glass-card p-4 flex gap-4 hover:bg-muted/30 transition-colors"
               >
                 {/* Image Thumbnail */}
                 <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex-shrink-0">
@@ -117,30 +121,166 @@ const FarmerHistory = () => {
                     {detection.crop_type} • {Math.round(detection.confidence * 100)}% confidence
                   </p>
 
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
+                  {/* Timestamps */}
+                  <div className="space-y-1 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
                       <Calendar className="w-3 h-3" />
-                      {format(new Date(detection.created_at), 'MMM d, yyyy')}
-                    </span>
-                    {detection.location_name && (
-                      <span className="flex items-center gap-1 truncate">
-                        <MapPin className="w-3 h-3" />
-                        {detection.location_name}
-                      </span>
+                      <span>Reported: {format(new Date(detection.created_at), 'MMM d, yyyy h:mm a')}</span>
+                    </div>
+                    {detection.verified_at && (
+                      <div className="flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-green-400" />
+                        <span>
+                          {detection.status === 'verified' ? 'Verified' : 'Reviewed'}: {format(new Date(detection.verified_at), 'MMM d, yyyy h:mm a')}
+                        </span>
+                      </div>
                     )}
                   </div>
 
                   {detection.notes && (
-                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2 italic">
-                      "{detection.notes}"
-                    </p>
+                    <div className="flex items-center gap-1 mt-1 text-xs text-primary">
+                      <MessageSquare className="w-3 h-3" />
+                      <span>LGU Response</span>
+                    </div>
                   )}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      {/* Detection Detail Dialog */}
+      <Dialog open={!!selectedDetection} onOpenChange={() => setSelectedDetection(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh]">
+          {selectedDetection && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Bug className="w-5 h-5 text-primary" />
+                  {selectedDetection.pest_type}
+                </DialogTitle>
+              </DialogHeader>
+              
+              <ScrollArea className="max-h-[60vh]">
+                <div className="space-y-4 pr-4">
+                  {/* Image */}
+                  <div className="rounded-lg overflow-hidden bg-muted aspect-video">
+                    <img 
+                      src={selectedDetection.image_url || '/placeholder.svg'} 
+                      alt={selectedDetection.pest_type}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Status Badge */}
+                  <div className="flex items-center justify-between">
+                    <Badge className={getStatusBadge(selectedDetection.status)}>
+                      {getStatusIcon(selectedDetection.status)}
+                      <span className="ml-1 capitalize">{selectedDetection.status}</span>
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {Math.round(selectedDetection.confidence * 100)}% confidence
+                    </span>
+                  </div>
+
+                  {/* Details */}
+                  <div className="space-y-3">
+                    <div className="glass-card p-3">
+                      <p className="text-xs font-semibold text-muted-foreground mb-1">Crop Type</p>
+                      <p className="text-sm text-foreground">{selectedDetection.crop_type}</p>
+                    </div>
+
+                    {selectedDetection.location_name && (
+                      <div className="glass-card p-3">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Location</p>
+                        <p className="text-sm text-foreground flex items-center gap-1">
+                          <MapPin className="w-3 h-3" />
+                          {selectedDetection.location_name}
+                        </p>
+                        {selectedDetection.latitude && selectedDetection.longitude && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Coordinates: {Number(selectedDetection.latitude).toFixed(6)}, {Number(selectedDetection.longitude).toFixed(6)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Timestamps Section */}
+                    <div className="glass-card p-3 space-y-2">
+                      <p className="text-xs font-semibold text-muted-foreground">Timeline</p>
+                      
+                      <div className="space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
+                          <div>
+                            <p className="text-xs font-medium text-foreground">Detection Submitted</p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(new Date(selectedDetection.created_at), 'MMMM d, yyyy • h:mm a')}
+                            </p>
+                          </div>
+                        </div>
+
+                        {selectedDetection.verified_at && (
+                          <div className="flex items-start gap-3">
+                            <div className={`w-2 h-2 rounded-full mt-1.5 ${
+                              selectedDetection.status === 'verified' ? 'bg-green-400' : 'bg-red-400'
+                            }`} />
+                            <div>
+                              <p className="text-xs font-medium text-foreground">
+                                {selectedDetection.status === 'verified' ? 'Verified by LGU' : 'Reviewed by LGU'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(selectedDetection.verified_at), 'MMMM d, yyyy • h:mm a')}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {selectedDetection.notes && (
+                          <div className="flex items-start gap-3">
+                            <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5" />
+                            <div>
+                              <p className="text-xs font-medium text-foreground">LGU Response</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(selectedDetection.updated_at), 'MMMM d, yyyy • h:mm a')}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* LGU Notes/Response */}
+                    {selectedDetection.notes && (
+                      <div className="glass-card p-3 border-l-4 border-primary">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">LGU Response</p>
+                        <p className="text-sm text-foreground">{selectedDetection.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Farmer Notes */}
+                    {(selectedDetection as any).farmer_notes && (
+                      <div className="glass-card p-3">
+                        <p className="text-xs font-semibold text-muted-foreground mb-1">Your Notes</p>
+                        <p className="text-sm text-muted-foreground italic">
+                          "{(selectedDetection as any).farmer_notes}"
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button variant="outline" onClick={() => setSelectedDetection(null)}>
+                  Close
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -123,6 +123,8 @@ export function useDetections(isAdmin = false) {
     longitude?: number;
     location_name?: string;
     image_base64?: string;
+    farmer_notes?: string;
+    farm_id?: string;
   }) => {
     try {
       const { data: result, error } = await supabase.functions.invoke('upload-detection', {
