@@ -261,11 +261,21 @@ export const VerificationQueue = () => {
                   </div>
                 </div>
 
-                {/* Notes */}
+                {/* Farmer Notes/Comments */}
+                {(selectedDetection as any).farmer_notes && (
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                    <p className="text-xs font-semibold text-blue-400 mb-1">Farmer's Comment:</p>
+                    <p className="text-sm text-foreground italic">
+                      "{(selectedDetection as any).farmer_notes}"
+                    </p>
+                  </div>
+                )}
+
+                {/* LGU Notes */}
                 {selectedDetection.notes && (
                   <div className="p-3 bg-muted/30 rounded-lg">
                     <p className="text-sm text-muted-foreground">
-                      <strong>Farmer Notes:</strong> {selectedDetection.notes}
+                      <strong>Admin Notes:</strong> {selectedDetection.notes}
                     </p>
                   </div>
                 )}

@@ -19,23 +19,30 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Verify user and check admin role
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claims, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claims?.claims) {
+    // Create client with user's token for authentication
+    const supabaseAuth = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    // Create service role client for database operations
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get the current user
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+    
+    if (userError || !user) {
+      console.error("User auth error:", userError);
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const userId = claims.claims.sub;
+    const userId = user.id;
+    console.log("Authenticated user:", userId);
 
     // Check if user is LGU admin
     const { data: roleData, error: roleError } = await supabase
@@ -45,8 +52,16 @@ Deno.serve(async (req) => {
       .eq("role", "lgu_admin")
       .maybeSingle();
 
-    if (roleError || !roleData) {
-      console.error("Role check failed:", roleError);
+    if (roleError) {
+      console.error("Role check error:", roleError);
+      return new Response(
+        JSON.stringify({ error: "Failed to verify admin role" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!roleData) {
+      console.error("User is not an admin:", userId);
       return new Response(
         JSON.stringify({ error: "Forbidden - Admin access required" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -62,7 +77,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Update the detection
+    console.log("Updating detection:", detection_id, "to status:", status);
+
+    // Update the detection using service role client
     const { data: detection, error: updateError } = await supabase
       .from("pest_detections")
       .update({
@@ -78,7 +95,7 @@ Deno.serve(async (req) => {
     if (updateError) {
       console.error("Update error:", updateError);
       return new Response(
-        JSON.stringify({ error: "Failed to update detection" }),
+        JSON.stringify({ error: "Failed to update detection", details: updateError.message }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -92,7 +109,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error("Unexpected error:", error);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ error: "Internal server error", details: error.message }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

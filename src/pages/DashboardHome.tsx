@@ -1,5 +1,4 @@
 import { StatsOverview } from '@/components/dashboard/StatsOverview';
-import { LiveDetectionFeed } from '@/components/dashboard/LiveDetectionFeed';
 import { useAuthContext } from '@/contexts/AuthContext';
 
 const DashboardHome = () => {
@@ -19,11 +18,6 @@ const DashboardHome = () => {
 
       {/* Stats */}
       <StatsOverview />
-
-      {/* Live Feed */}
-      <div className="h-[500px]">
-        <LiveDetectionFeed />
-      </div>
     </div>
   );
 };

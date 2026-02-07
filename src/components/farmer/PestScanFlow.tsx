@@ -200,9 +200,16 @@ export const PestScanFlow = () => {
     }
   };
 
-  // Step 2: Start Camera
+  // Step 2: Start Camera with better permission handling
   const startCamera = useCallback(async () => {
     try {
+      // First check if mediaDevices is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast.error('Camera not supported on this browser. Please use a modern browser.');
+        return;
+      }
+
+      // Request camera permission explicitly
       const constraints: MediaStreamConstraints = {
         video: { 
           facingMode: 'environment', 
@@ -223,16 +230,32 @@ export const PestScanFlow = () => {
         const capabilities = track.getCapabilities?.();
         if (capabilities && 'torch' in capabilities) {
           setFlashSupported(true);
+        } else {
+          setFlashSupported(false);
         }
       }
     } catch (error: any) {
       console.error('Camera error:', error);
-      if (error.name === 'NotAllowedError') {
-        toast.error('Camera access denied. Please allow camera permission in your browser settings.');
-      } else if (error.name === 'NotFoundError') {
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        toast.error('Camera access denied. Please allow camera permission in your browser settings, then refresh the page.');
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
         toast.error('No camera found on this device.');
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        toast.error('Camera is being used by another application. Please close other apps using the camera.');
+      } else if (error.name === 'OverconstrainedError') {
+        // Try again with simpler constraints
+        try {
+          const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true });
+          if (videoRef.current) {
+            videoRef.current.srcObject = simpleStream;
+            streamRef.current = simpleStream;
+            setIsStreaming(true);
+          }
+        } catch (retryError) {
+          toast.error('Unable to access camera. Please check your permissions.');
+        }
       } else {
-        toast.error('Unable to access camera. Please check your permissions.');
+        toast.error(`Camera error: ${error.message || 'Unable to access camera'}`);
       }
     }
   }, []);
@@ -383,6 +406,13 @@ export const PestScanFlow = () => {
     setIsSubmitting(true);
 
     try {
+      // Get the farm ID if a farm was selected
+      let farmId: string | undefined;
+      if (reportData.selectedFarmNumber) {
+        const selectedFarm = farms.find(f => f.farm_number === reportData.selectedFarmNumber);
+        farmId = selectedFarm?.id;
+      }
+
       // Submit each image as a separate detection
       for (const image of reportData.images) {
         if (!image.detection) continue;
@@ -395,6 +425,7 @@ export const PestScanFlow = () => {
           longitude: reportData.location.longitude,
           image_base64: image.dataUrl,
           farmer_notes: reportData.farmerNotes,
+          farm_id: farmId,
         });
       }
 
@@ -409,7 +440,7 @@ export const PestScanFlow = () => {
     } finally {
       setIsSubmitting(false);
     }
-  }, [reportData, uploadDetection]);
+  }, [reportData, uploadDetection, farms]);
 
   // Retake photos
   const retakePhotos = () => {
@@ -597,19 +628,28 @@ export const PestScanFlow = () => {
                 </Badge>
               )}
               
-              {/* Flash Toggle */}
-              <Button
-                variant="secondary"
-                size="icon"
-                className="bg-background/80 backdrop-blur"
-                onClick={toggleFlash}
-              >
-                {flashEnabled ? (
-                  <Flashlight className="w-5 h-5 text-yellow-400" />
-                ) : (
-                  <FlashlightOff className="w-5 h-5" />
-                )}
-              </Button>
+              {/* Flash Toggle with Label */}
+              <div className="flex flex-col items-center gap-1">
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className={cn(
+                    "bg-background/80 backdrop-blur",
+                    flashEnabled && "bg-yellow-500/80"
+                  )}
+                  onClick={toggleFlash}
+                  disabled={!flashSupported}
+                >
+                  {flashEnabled ? (
+                    <Flashlight className="w-5 h-5 text-yellow-900" />
+                  ) : (
+                    <FlashlightOff className="w-5 h-5" />
+                  )}
+                </Button>
+                <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
+                  {flashSupported ? (flashEnabled ? 'Flash On' : 'Flash Off') : 'No Flash'}
+                </span>
+              </div>
             </div>
 
             {/* Captured Images Preview */}
