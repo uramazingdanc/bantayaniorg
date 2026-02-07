@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -75,14 +75,23 @@ interface PestDetectionMapProps {
   isAdmin?: boolean;
 }
 
-// Component to recenter map when center changes
-const MapRecenter = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
+// Component to set initial view only once (don't force recenter)
+const MapInitialView = ({ center, zoom }: { center: [number, number]; zoom: number }) => {
   const map = useMap();
+  const hasInitialized = useRef(false);
+  
   useEffect(() => {
-    map.setView(center, zoom);
+    if (!hasInitialized.current) {
+      map.setView(center, zoom);
+      hasInitialized.current = true;
+    }
   }, [center, zoom, map]);
+  
   return null;
 };
+
+// Import useRef at top
+
 
 // Fetch weather data from Open-Meteo API
 const fetchWeather = async (lat: number, lng: number): Promise<WeatherData | null> => {
@@ -158,9 +167,9 @@ const PestDetectionMap = ({
 
   return (
     <div className="relative rounded-xl overflow-hidden" style={{ height }}>
-      {/* Weather Overlay - positioned to not cover zoom controls */}
+      {/* Weather Overlay - positioned in bottom-left corner, away from zoom controls */}
       {showWeather && weather && (
-        <div className="absolute bottom-4 left-4 z-[1000] glass-card p-3 space-y-2">
+        <div className="absolute bottom-4 left-4 z-[400] glass-card p-3 space-y-2 pointer-events-auto">
           <h4 className="text-xs font-semibold text-foreground">Current Weather</h4>
           <div className="flex flex-col gap-1.5 text-xs">
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -179,8 +188,8 @@ const PestDetectionMap = ({
         </div>
       )}
 
-      {/* Detection Stats Overlay */}
-      <div className="absolute top-4 right-4 z-[1000] glass-card p-3">
+      {/* Detection Stats Overlay - top right, away from zoom controls */}
+      <div className="absolute top-4 right-4 z-[400] glass-card p-3 pointer-events-auto">
         <div className="space-y-1.5 text-xs">
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-accent" />
@@ -212,7 +221,7 @@ const PestDetectionMap = ({
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
-        <MapRecenter center={mapCenter} zoom={zoom} />
+        <MapInitialView center={mapCenter} zoom={zoom} />
         
         {/* OpenStreetMap Tile Layer */}
         <TileLayer

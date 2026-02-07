@@ -7,6 +7,7 @@ export interface Farmer {
   user_id: string;
   name: string;
   email: string;
+  avatar_url?: string;
   farm_location?: string;
   farm_size?: string;
   main_crop?: string;

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Mail, MapPin, Sprout, MoreVertical, UserCheck, Users, Loader2, Phone, Ruler } from 'lucide-react';
+import { Search, Mail, MapPin, MoreVertical, UserCheck, Users, Loader2, Phone, Ruler, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import {
 import { useFarmers, Farmer } from '@/hooks/useFarmers';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 
 interface FarmerFarm {
   id: string;
@@ -26,6 +28,7 @@ interface FarmerFarm {
 }
 
 const UserManagement = () => {
+  const navigate = useNavigate();
   const { farmers, isLoading, getStats } = useFarmers();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
@@ -112,23 +115,23 @@ const UserManagement = () => {
           </p>
         </div>
       ) : (
-        <div className="glass-card overflow-hidden">
-          <table className="w-full">
+        <div className="glass-card overflow-hidden overflow-x-auto">
+          <table className="w-full min-w-[700px]">
             <thead>
               <tr className="border-b border-border/50">
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">
                   Farmer
                 </th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden md:table-cell">
                   Location
                 </th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden lg:table-cell">
                   Phone
                 </th>
                 <th className="text-left p-4 text-sm font-medium text-muted-foreground">
                   Reports
                 </th>
-                <th className="text-left p-4 text-sm font-medium text-muted-foreground">
+                <th className="text-left p-4 text-sm font-medium text-muted-foreground hidden sm:table-cell">
                   Joined
                 </th>
                 <th className="w-12"></th>
@@ -142,21 +145,29 @@ const UserManagement = () => {
                   onClick={() => setSelectedFarmer(farmer)}
                 >
                   <td className="p-4">
-                    <div>
-                      <p className="font-medium text-foreground">{farmer.name}</p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
-                        <Mail className="w-3 h-3" />
-                        {farmer.email}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={(farmer as any).avatar_url || ''} alt={farmer.name} />
+                        <AvatarFallback className="bg-primary/20 text-primary">
+                          {farmer.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-foreground">{farmer.name}</p>
+                        <p className="text-sm text-muted-foreground flex items-center gap-1">
+                          <Mail className="w-3 h-3" />
+                          <span className="truncate max-w-[150px]">{farmer.email}</span>
+                        </p>
+                      </div>
                     </div>
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 hidden md:table-cell">
                     <span className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      {farmer.farm_location || 'Not set'}
+                      <MapPin className="w-4 h-4 flex-shrink-0" />
+                      <span className="truncate max-w-[150px]">{farmer.farm_location || 'Not set'}</span>
                     </span>
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 hidden lg:table-cell">
                     <span className="flex items-center gap-1 text-sm text-muted-foreground">
                       <Phone className="w-4 h-4" />
                       {farmer.phone || 'Not set'}
@@ -168,16 +179,16 @@ const UserManagement = () => {
                         {farmer.verified_reports}
                       </span>
                       <span className="text-muted-foreground">
-                        /{farmer.total_reports} verified
+                        /{farmer.total_reports}
                       </span>
                     </div>
                     {farmer.pending_reports > 0 && (
-                      <span className="text-xs text-accent-foreground">
+                      <span className="text-xs text-yellow-500">
                         ({farmer.pending_reports} pending)
                       </span>
                     )}
                   </td>
-                  <td className="p-4">
+                  <td className="p-4 hidden sm:table-cell">
                     <span className="text-sm text-muted-foreground">
                       {format(new Date(farmer.created_at), 'MMM d, yyyy')}
                     </span>
@@ -193,8 +204,9 @@ const UserManagement = () => {
                         <DropdownMenuItem onClick={() => setSelectedFarmer(farmer)}>
                           View Profile
                         </DropdownMenuItem>
-                        <DropdownMenuItem>View Reports</DropdownMenuItem>
-                        <DropdownMenuItem>Send Message</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate(`/admin/pest-reports?farmer=${farmer.user_id}`)}>
+                          View Reports
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </td>
@@ -211,10 +223,17 @@ const UserManagement = () => {
           {selectedFarmer && (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-primary" />
-                  {selectedFarmer.name}
-                </DialogTitle>
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage src={(selectedFarmer as any).avatar_url || ''} alt={selectedFarmer.name} />
+                    <AvatarFallback className="bg-primary/20 text-primary text-lg">
+                      {selectedFarmer.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <DialogTitle>
+                    {selectedFarmer.name}
+                  </DialogTitle>
+                </div>
               </DialogHeader>
               
               <ScrollArea className="max-h-[60vh]">
