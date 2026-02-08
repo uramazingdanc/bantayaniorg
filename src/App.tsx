@@ -21,6 +21,7 @@ import FarmerCamera from "./pages/farmer/FarmerCamera";
 import FarmerAdvisories from "./pages/farmer/FarmerAdvisories";
 import FarmerMap from "./pages/farmer/FarmerMap";
 import PestScanPage from "./pages/farmer/PestScanPage";
+import FarmerMessages from "./pages/farmer/FarmerMessages";
 import TermsAndConditions from "./pages/TermsAndConditions";
 
 const queryClient = new QueryClient();
@@ -108,6 +109,14 @@ const App = () => (
               element={
                 <ProtectedRoute allowedRoles={['farmer']}>
                   <FarmerMap />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/farmer/messages"
+              element={
+                <ProtectedRoute allowedRoles={['farmer']}>
+                  <FarmerMessages />
                 </ProtectedRoute>
               }
             />

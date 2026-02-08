@@ -20,6 +20,7 @@ import {
   Upload,
   ImagePlus,
   Trash2,
+  MessageCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -574,12 +575,23 @@ export const PestScanFlow = () => {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <h1 className="font-semibold text-lg">Pest Scan</h1>
-        <Badge variant="outline" className={cn(
-          isOnline ? 'text-green-500 border-green-500/50' : 'text-red-500 border-red-500/50'
-        )}>
-          {isOnline ? <Wifi className="w-3 h-3 mr-1" /> : <WifiOff className="w-3 h-3 mr-1" />}
-          {isOnline ? 'Online' : 'Offline'}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {/* Chat with Admin Button */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => navigate('/farmer/messages')}
+            className="relative"
+          >
+            <MessageCircle className="w-5 h-5" />
+          </Button>
+          <Badge variant="outline" className={cn(
+            isOnline ? 'text-green-500 border-green-500/50' : 'text-red-500 border-red-500/50'
+          )}>
+            {isOnline ? <Wifi className="w-3 h-3 mr-1" /> : <WifiOff className="w-3 h-3 mr-1" />}
+            {isOnline ? 'Online' : 'Offline'}
+          </Badge>
+        </div>
       </div>
 
       {/* Content */}
@@ -768,13 +780,24 @@ export const PestScanFlow = () => {
               </p>
 
               <div className="flex items-center gap-4">
-                {/* Upload Button */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-14 h-14 rounded-full bg-white/20 backdrop-blur flex items-center justify-center"
-                >
-                  <ImagePlus className="w-6 h-6 text-white" />
-                </button>
+                {/* Upload Images Button with Label */}
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={reportData.images.length >= MAX_IMAGES}
+                    className={cn(
+                      "w-14 h-14 rounded-full flex items-center justify-center",
+                      reportData.images.length >= MAX_IMAGES
+                        ? "bg-white/10 backdrop-blur"
+                        : "bg-white/20 backdrop-blur hover:bg-white/30"
+                    )}
+                  >
+                    <Upload className="w-6 h-6 text-white" />
+                  </button>
+                  <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
+                    Upload
+                  </span>
+                </div>
 
                 {/* Capture Button */}
                 <button
@@ -787,19 +810,24 @@ export const PestScanFlow = () => {
                   </div>
                 </button>
 
-                {/* Proceed Button */}
-                <button
-                  onClick={proceedToDiagnosis}
-                  disabled={reportData.images.length === 0}
-                  className={cn(
-                    "w-14 h-14 rounded-full flex items-center justify-center",
-                    reportData.images.length > 0 
-                      ? "bg-primary text-primary-foreground" 
-                      : "bg-white/20 backdrop-blur text-white/50"
-                  )}
-                >
-                  <ArrowRight className="w-6 h-6" />
-                </button>
+                {/* Proceed Button with Label */}
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={proceedToDiagnosis}
+                    disabled={reportData.images.length === 0}
+                    className={cn(
+                      "w-14 h-14 rounded-full flex items-center justify-center",
+                      reportData.images.length > 0 
+                        ? "bg-primary text-primary-foreground" 
+                        : "bg-white/20 backdrop-blur text-white/50"
+                    )}
+                  >
+                    <ArrowRight className="w-6 h-6" />
+                  </button>
+                  <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
+                    Analyze
+                  </span>
+                </div>
               </div>
 
               <input
