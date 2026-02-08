@@ -293,9 +293,16 @@ export const PestScanFlow = () => {
     }
   }, [currentStep, startCamera, stopCamera]);
 
-  // Capture photo
+  const MAX_IMAGES = 4;
+
+  // Capture photo (max 4 images)
   const capturePhoto = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return;
+
+    if (reportData.images.length >= MAX_IMAGES) {
+      toast.error(`Maximum ${MAX_IMAGES} images allowed`);
+      return;
+    }
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -315,19 +322,34 @@ export const PestScanFlow = () => {
 
     setReportData(prev => ({
       ...prev,
-      images: [...prev.images, newImage],
+      images: [...prev.images, newImage].slice(0, MAX_IMAGES),
       timestamp: new Date().toISOString(),
     }));
 
-    toast.success('Photo captured!');
-  }, []);
+    toast.success(`Photo captured! (${reportData.images.length + 1}/${MAX_IMAGES})`);
+  }, [reportData.images.length]);
 
-  // Handle file upload for bulk images
+  // Handle file upload for bulk images (max 4)
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
-    Array.from(files).forEach(file => {
+    const currentCount = reportData.images.length;
+    const availableSlots = MAX_IMAGES - currentCount;
+
+    if (availableSlots <= 0) {
+      toast.error(`Maximum ${MAX_IMAGES} images allowed`);
+      e.target.value = '';
+      return;
+    }
+
+    const filesToProcess = Array.from(files).slice(0, availableSlots);
+    
+    if (files.length > availableSlots) {
+      toast.warning(`Only ${availableSlots} more image(s) can be added (max ${MAX_IMAGES})`);
+    }
+
+    filesToProcess.forEach(file => {
       if (!file.type.startsWith('image/')) return;
       
       const reader = new FileReader();
@@ -339,15 +361,15 @@ export const PestScanFlow = () => {
         };
         setReportData(prev => ({
           ...prev,
-          images: [...prev.images, newImage],
+          images: [...prev.images, newImage].slice(0, MAX_IMAGES),
         }));
       };
       reader.readAsDataURL(file);
     });
 
-    toast.success(`${files.length} image(s) added`);
+    toast.success(`${filesToProcess.length} image(s) added`);
     e.target.value = ''; // Reset input
-  }, []);
+  }, [reportData.images.length]);
 
   // Remove image
   const removeImage = (imageId: string) => {
@@ -367,34 +389,94 @@ export const PestScanFlow = () => {
     processImages();
   };
 
-  // Step 3: Mock AI Processing
-  const processImages = useCallback(() => {
+  // Step 3: Real AI Processing via detect-pest edge function
+  const processImages = useCallback(async () => {
     setIsProcessing(true);
 
-    // Simulate AI analysis with a delay
-    setTimeout(() => {
-      const updatedImages = reportData.images.map(img => {
-        const randomPest = MOCK_PESTS[Math.floor(Math.random() * MOCK_PESTS.length)];
-        const confidence = 0.75 + Math.random() * 0.20;
-        return {
-          ...img,
-          detection: {
-            pest: randomPest.name,
-            scientific_name: randomPest.scientific,
-            confidence,
-          },
-        };
-      });
+    try {
+      const updatedImages: CapturedImage[] = [];
+
+      for (const img of reportData.images) {
+        try {
+          // Call the detect-pest edge function
+          const response = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/detect-pest`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({
+                image_base64: img.dataUrl,
+                crop_type: reportData.cropType,
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('AI detection error:', errorData);
+            // Use fallback for this image
+            updatedImages.push({
+              ...img,
+              detection: {
+                pest: 'Unknown',
+                scientific_name: 'Analysis failed',
+                confidence: 0,
+              },
+            });
+            continue;
+          }
+
+          const result = await response.json();
+          
+          if (result.success && result.detection) {
+            updatedImages.push({
+              ...img,
+              detection: {
+                pest: result.detection.pest_type || 'None detected',
+                scientific_name: result.detection.scientific_name || '',
+                confidence: result.detection.confidence || 0,
+              },
+            });
+          } else {
+            updatedImages.push({
+              ...img,
+              detection: {
+                pest: 'No pest detected',
+                scientific_name: '',
+                confidence: 0,
+              },
+            });
+          }
+        } catch (error) {
+          console.error('Error analyzing image:', error);
+          updatedImages.push({
+            ...img,
+            detection: {
+              pest: 'Analysis error',
+              scientific_name: 'Please try again',
+              confidence: 0,
+            },
+          });
+        }
+      }
 
       setReportData(prev => ({
         ...prev,
         images: updatedImages,
       }));
 
-      setIsProcessing(false);
       setCurrentStep('diagnosis');
-    }, 2500);
-  }, [reportData.images]);
+      toast.success('AI analysis complete!');
+    } catch (error) {
+      console.error('Processing error:', error);
+      toast.error('Failed to analyze images. Please try again.');
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [reportData.images, reportData.cropType]);
 
   // Step 4: Submit Report
   const submitReport = useCallback(async () => {
@@ -680,8 +762,8 @@ export const PestScanFlow = () => {
               <p className="text-white text-sm bg-black/50 px-4 py-2 rounded-full flex items-center gap-2">
                 <Bug className="w-4 h-4" />
                 {reportData.images.length === 0 
-                  ? 'Position the pest in the frame'
-                  : `${reportData.images.length} image(s) captured`
+                  ? 'Capture or upload up to 4 images'
+                  : `${reportData.images.length}/${MAX_IMAGES} images`
                 }
               </p>
 
@@ -697,7 +779,7 @@ export const PestScanFlow = () => {
                 {/* Capture Button */}
                 <button
                   onClick={capturePhoto}
-                  disabled={!isStreaming}
+                  disabled={!isStreaming || reportData.images.length >= MAX_IMAGES}
                   className="w-20 h-20 rounded-full bg-white border-4 border-primary flex items-center justify-center disabled:opacity-50 shadow-lg"
                 >
                   <div className="w-16 h-16 rounded-full bg-primary flex items-center justify-center">
