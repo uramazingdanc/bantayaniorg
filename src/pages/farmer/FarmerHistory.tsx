@@ -1,39 +1,83 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, Clock, XCircle, MapPin, Calendar, Bug, Loader2, MessageSquare } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, XCircle, MapPin, Calendar, Bug, Loader2, MessageSquare, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 import { useDetections, DetectionWithProfile } from '@/hooks/useDetections';
+import { useMessages } from '@/hooks/useMessages';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 
 const FarmerHistory = () => {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const { detections, isLoading } = useDetections(false);
+  const { messages, sendMessage } = useMessages();
   const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
   const [selectedDetection, setSelectedDetection] = useState<DetectionWithProfile | null>(null);
+  const [showMessageDialog, setShowMessageDialog] = useState(false);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   const filteredDetections = detections.filter(d => 
     filter === 'all' ? true : d.status === filter
   );
 
+  // Get messages for a specific detection
+  const getDetectionMessages = (detectionId: string) => {
+    return messages.filter(m => m.detection_id === detectionId);
+  };
+
+  // Get unread messages count for a detection
+  const getUnreadCount = (detectionId: string) => {
+    if (!user) return 0;
+    return messages.filter(
+      m => m.detection_id === detectionId && 
+           m.recipient_id === user.id && 
+           !m.is_read
+    ).length;
+  };
+
+  const handleSendReply = async () => {
+    if (!selectedDetection || !replyMessage.trim()) {
+      toast.error('Please enter a message');
+      return;
+    }
+    setIsSending(true);
+    try {
+      // Send to LGU admin (we'll use verified_by or a default admin)
+      const recipientId = selectedDetection.verified_by || 'admin';
+      await sendMessage(recipientId, replyMessage, selectedDetection.id);
+      setReplyMessage('');
+      setShowMessageDialog(false);
+      toast.success('Message sent to LGU');
+    } catch (error) {
+      toast.error('Failed to send message');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'verified':
-        return <CheckCircle2 className="w-4 h-4 text-green-400" />;
+        return <CheckCircle2 className="w-4 h-4 text-primary" />;
       case 'rejected':
-        return <XCircle className="w-4 h-4 text-red-400" />;
+        return <XCircle className="w-4 h-4 text-destructive" />;
       default:
-        return <Clock className="w-4 h-4 text-yellow-400" />;
+        return <Clock className="w-4 h-4 text-accent-foreground" />;
     }
   };
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, string> = {
-      verified: 'bg-green-500/20 text-green-400 border-green-500/30',
-      rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
-      pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      verified: 'bg-primary/20 text-primary border-primary/30',
+      rejected: 'bg-destructive/20 text-destructive border-destructive/30',
+      pending: 'bg-accent/20 text-accent-foreground border-accent/30',
     };
     return variants[status] || variants.pending;
   };
@@ -90,62 +134,84 @@ const FarmerHistory = () => {
           </div>
         ) : (
           <div className="space-y-3">
-            {filteredDetections.map((detection) => (
-              <button
-                key={detection.id}
-                onClick={() => setSelectedDetection(detection)}
-                className="w-full text-left glass-card p-4 flex gap-4 hover:bg-muted/30 transition-colors"
-              >
-                {/* Image Thumbnail */}
-                <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                  <img 
-                    src={detection.image_url || '/placeholder.svg'} 
-                    alt={detection.pest_type}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <h3 className="font-medium text-foreground truncate">
-                      {detection.pest_type}
-                    </h3>
-                    <Badge className={`flex-shrink-0 ${getStatusBadge(detection.status)}`}>
-                      {getStatusIcon(detection.status)}
-                      <span className="ml-1">{detection.status}</span>
-                    </Badge>
-                  </div>
-                  
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {detection.crop_type} • {Math.round(detection.confidence * 100)}% confidence
-                  </p>
-
-                  {/* Timestamps */}
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      <span>Reported: {format(new Date(detection.created_at), 'MMM d, yyyy h:mm a')}</span>
-                    </div>
-                    {detection.verified_at && (
-                      <div className="flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-green-400" />
-                        <span>
-                          {detection.status === 'verified' ? 'Verified' : 'Reviewed'}: {format(new Date(detection.verified_at), 'MMM d, yyyy h:mm a')}
-                        </span>
+            {filteredDetections.map((detection) => {
+              const unreadCount = getUnreadCount(detection.id);
+              const detectionMessages = getDetectionMessages(detection.id);
+              
+              return (
+                <button
+                  key={detection.id}
+                  onClick={() => setSelectedDetection(detection)}
+                  className="w-full text-left glass-card p-4 flex gap-4 hover:bg-muted/30 transition-colors"
+                >
+                  {/* Image Thumbnail */}
+                  <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex-shrink-0 relative">
+                    <img 
+                      src={detection.image_url || '/placeholder.svg'} 
+                      alt={detection.pest_type}
+                      className="w-full h-full object-cover"
+                    />
+                    {unreadCount > 0 && (
+                      <div className="absolute top-1 right-1 w-5 h-5 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs font-bold">
+                        {unreadCount}
                       </div>
                     )}
                   </div>
 
-                  {detection.notes && (
-                    <div className="flex items-center gap-1 mt-1 text-xs text-primary">
-                      <MessageSquare className="w-3 h-3" />
-                      <span>LGU Response</span>
+                  {/* Details */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <h3 className="font-medium text-foreground truncate">
+                        {detection.pest_type}
+                      </h3>
+                      <Badge className={`flex-shrink-0 ${getStatusBadge(detection.status)}`}>
+                        {getStatusIcon(detection.status)}
+                        <span className="ml-1">{detection.status}</span>
+                      </Badge>
                     </div>
-                  )}
-                </div>
-              </button>
-            ))}
+                    
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {detection.crop_type} • {Math.round(detection.confidence * 100)}% confidence
+                    </p>
+
+                    {/* Timestamps */}
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        <span>Reported: {format(new Date(detection.created_at), 'MMM d, yyyy h:mm a')}</span>
+                      </div>
+                      {detection.verified_at && (
+                        <div className="flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-primary" />
+                          <span>
+                            {detection.status === 'verified' ? 'Verified' : 'Reviewed'}: {format(new Date(detection.verified_at), 'MMM d, yyyy h:mm a')}
+                          </span>
+                        </div>
+                      )}
+                      {(detection as any).lgu_response_at && (
+                        <div className="flex items-center gap-1">
+                          <Send className="w-3 h-3 text-primary" />
+                          <span>
+                            LGU Response: {format(new Date((detection as any).lgu_response_at), 'MMM d, yyyy h:mm a')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {(detection.notes || detectionMessages.length > 0) && (
+                      <div className="flex items-center gap-1 mt-1 text-xs text-primary">
+                        <MessageSquare className="w-3 h-3" />
+                        <span>
+                          {detectionMessages.length > 0 
+                            ? `${detectionMessages.length} message(s)` 
+                            : 'LGU Response'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -224,7 +290,7 @@ const FarmerHistory = () => {
                         {selectedDetection.verified_at && (
                           <div className="flex items-start gap-3">
                             <div className={`w-2 h-2 rounded-full mt-1.5 ${
-                              selectedDetection.status === 'verified' ? 'bg-green-400' : 'bg-red-400'
+                              selectedDetection.status === 'verified' ? 'bg-primary' : 'bg-destructive'
                             }`} />
                             <div>
                               <p className="text-xs font-medium text-foreground">
@@ -237,14 +303,19 @@ const FarmerHistory = () => {
                           </div>
                         )}
 
-                        {selectedDetection.notes && (
+                        {(selectedDetection as any).lgu_response_at && (
                           <div className="flex items-start gap-3">
-                            <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5" />
+                            <div className="w-2 h-2 rounded-full bg-primary mt-1.5" />
                             <div>
-                              <p className="text-xs font-medium text-foreground">LGU Response</p>
+                              <p className="text-xs font-medium text-foreground">LGU Response/Intervention</p>
                               <p className="text-xs text-muted-foreground">
-                                {format(new Date(selectedDetection.updated_at), 'MMMM d, yyyy • h:mm a')}
+                                {format(new Date((selectedDetection as any).lgu_response_at), 'MMMM d, yyyy • h:mm a')}
                               </p>
+                              {(selectedDetection as any).intervention_type && (
+                                <p className="text-xs text-primary mt-1">
+                                  Type: {(selectedDetection as any).intervention_type}
+                                </p>
+                              )}
                             </div>
                           </div>
                         )}
@@ -256,6 +327,28 @@ const FarmerHistory = () => {
                       <div className="glass-card p-3 border-l-4 border-primary">
                         <p className="text-xs font-semibold text-muted-foreground mb-1">LGU Response</p>
                         <p className="text-sm text-foreground">{selectedDetection.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Messages Section */}
+                    {getDetectionMessages(selectedDetection.id).length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground">Messages</p>
+                        {getDetectionMessages(selectedDetection.id).map((msg) => (
+                          <div 
+                            key={msg.id} 
+                            className={`glass-card p-3 ${
+                              msg.sender_id === user?.id 
+                                ? 'border-l-4 border-primary/50 ml-4' 
+                                : 'border-l-4 border-accent mr-4'
+                            }`}
+                          >
+                            <p className="text-xs text-muted-foreground mb-1">
+                              {msg.sender_id === user?.id ? 'You' : 'LGU Admin'} • {format(new Date(msg.created_at), 'MMM d, h:mm a')}
+                            </p>
+                            <p className="text-sm text-foreground">{msg.content}</p>
+                          </div>
+                        ))}
                       </div>
                     )}
 
@@ -272,13 +365,59 @@ const FarmerHistory = () => {
                 </div>
               </ScrollArea>
 
-              <div className="flex justify-end pt-4 border-t">
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowMessageDialog(true);
+                  }}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Reply
+                </Button>
                 <Button variant="outline" onClick={() => setSelectedDetection(null)}>
                   Close
                 </Button>
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Message Reply Dialog */}
+      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              Send Message to LGU
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Type your message or question for the LGU..."
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              rows={4}
+            />
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowMessageDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleSendReply}
+                disabled={isSending || !replyMessage.trim()}
+              >
+                {isSending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Send Message
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
