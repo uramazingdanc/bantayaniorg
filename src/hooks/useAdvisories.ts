@@ -91,6 +91,8 @@ export function useAdvisories() {
     severity: string;
     affected_crops: string[];
     affected_regions: string[];
+    category?: string;
+    target_farmer_id?: string;
   }) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();

@@ -11,13 +11,13 @@ import { useFarmerFarms, FarmerFarm } from '@/hooks/useFarmerFarms';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const FARM_SIZES = [
-  'Less than 1 hectare',
-  '1-3 hectares',
-  '3-5 hectares',
-  '5-10 hectares',
-  'More than 10 hectares'
-];
+// Custom size units
+const SIZE_UNITS = ['hectares', 'sq. meters'];
+
+interface FarmSizeInput {
+  value: string;
+  unit: string;
+}
 
 interface FarmFormData {
   farm_name: string;
@@ -25,7 +25,8 @@ interface FarmFormData {
   address: string;
   latitude: string;
   longitude: string;
-  size: string;
+  sizeValue: string;
+  sizeUnit: string;
 }
 
 const emptyFarmData: FarmFormData = {
@@ -34,7 +35,18 @@ const emptyFarmData: FarmFormData = {
   address: '',
   latitude: '',
   longitude: '',
-  size: '',
+  sizeValue: '',
+  sizeUnit: 'hectares',
+};
+
+// Helper to parse size string like "5 hectares" or "1000 sq. meters"
+const parseSize = (size: string | null): { value: string; unit: string } => {
+  if (!size) return { value: '', unit: 'hectares' };
+  const match = size.match(/^([\d.]+)\s*(hectares|sq\. meters)?$/i);
+  if (match) {
+    return { value: match[1], unit: match[2] || 'hectares' };
+  }
+  return { value: size, unit: 'hectares' };
 };
 
 const FarmerProfile = () => {
@@ -58,13 +70,15 @@ const FarmerProfile = () => {
     [1, 2, 3].forEach(num => {
       const existingFarm = farms.find(f => f.farm_number === num);
       if (existingFarm) {
+        const parsedSize = parseSize(existingFarm.size);
         initial[num] = {
           farm_name: existingFarm.farm_name || '',
           landmark: existingFarm.landmark || '',
           address: existingFarm.address || '',
           latitude: existingFarm.latitude?.toString() || '',
           longitude: existingFarm.longitude?.toString() || '',
-          size: existingFarm.size || '',
+          sizeValue: parsedSize.value,
+          sizeUnit: parsedSize.unit,
         };
       } else {
         initial[num] = { ...emptyFarmData };
@@ -79,13 +93,15 @@ const FarmerProfile = () => {
     [1, 2, 3].forEach(num => {
       const existingFarm = farms.find(f => f.farm_number === num);
       if (existingFarm) {
+        const parsedSize = parseSize(existingFarm.size);
         updated[num] = {
           farm_name: existingFarm.farm_name || '',
           landmark: existingFarm.landmark || '',
           address: existingFarm.address || '',
           latitude: existingFarm.latitude?.toString() || '',
           longitude: existingFarm.longitude?.toString() || '',
-          size: existingFarm.size || '',
+          sizeValue: parsedSize.value,
+          sizeUnit: parsedSize.unit,
         };
       } else {
         updated[num] = farmForms[num] || { ...emptyFarmData };
@@ -146,7 +162,8 @@ const FarmerProfile = () => {
       // Save all farms that have data
       for (const farmNum of [1, 2, 3]) {
         const farmData = farmForms[farmNum];
-        const hasData = farmData.address || farmData.landmark || farmData.size;
+        const hasData = farmData.address || farmData.landmark || farmData.sizeValue;
+        const sizeString = farmData.sizeValue ? `${farmData.sizeValue} ${farmData.sizeUnit}` : null;
         
         if (hasData) {
           await saveFarm({
@@ -156,7 +173,7 @@ const FarmerProfile = () => {
             address: farmData.address || null,
             latitude: farmData.latitude ? parseFloat(farmData.latitude) : null,
             longitude: farmData.longitude ? parseFloat(farmData.longitude) : null,
-            size: farmData.size || null,
+            size: sizeString,
           });
         }
       }
@@ -411,19 +428,30 @@ const FarmerProfile = () => {
                       <Label className="flex items-center gap-2">
                         <Ruler className="w-4 h-4" /> Farm Size
                       </Label>
-                      <Select
-                        value={farmForms[farmNum]?.size || ''}
-                        onValueChange={(value) => updateFarmForm(farmNum, 'size', value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select farm size" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FARM_SIZES.map((size) => (
-                            <SelectItem key={size} value={size}>{size}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="flex gap-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={farmForms[farmNum]?.sizeValue || ''}
+                          onChange={(e) => updateFarmForm(farmNum, 'sizeValue', e.target.value)}
+                          placeholder="Enter size"
+                          className="flex-1"
+                        />
+                        <Select
+                          value={farmForms[farmNum]?.sizeUnit || 'hectares'}
+                          onValueChange={(value) => updateFarmForm(farmNum, 'sizeUnit', value)}
+                        >
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SIZE_UNITS.map((unit) => (
+                              <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
                     {hasFarmData(farmNum) && (

@@ -54,17 +54,21 @@ const BARANGAYS = [
   'Sisilang na Ligaya', 'Social', 'Tugatug', 'Tulay na Bato', 'Vega Grande'
 ];
 
+type AdvisoryCategory = 'general_advisory' | 'specific_response';
+
 const Advisories = () => {
   const { advisories, isLoading, createAdvisory, toggleActive, deleteAdvisory } = useAdvisories();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAdvisory, setSelectedAdvisory] = useState<typeof advisories[0] | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<'all' | AdvisoryCategory>('all');
   const [newAdvisory, setNewAdvisory] = useState({
     title: '',
     content: '',
     affectedCrops: '',
     affectedBarangays: [] as string[],
     severity: 'medium' as SeverityLevel,
+    category: 'general_advisory' as AdvisoryCategory,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -78,6 +82,7 @@ const Advisories = () => {
         severity: newAdvisory.severity,
         affected_crops: newAdvisory.affectedCrops.split(',').map((c) => c.trim()).filter(Boolean),
         affected_regions: newAdvisory.affectedBarangays,
+        category: newAdvisory.category,
       });
       
       setNewAdvisory({
@@ -86,6 +91,7 @@ const Advisories = () => {
         affectedCrops: '',
         affectedBarangays: [],
         severity: 'medium',
+        category: 'general_advisory',
       });
       setIsOpen(false);
     } catch (error) {
@@ -94,6 +100,11 @@ const Advisories = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Filter advisories by category
+  const filteredAdvisories = advisories.filter(a => 
+    categoryFilter === 'all' ? true : (a as any).category === categoryFilter
+  );
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
     await toggleActive(id, isActive);
@@ -159,6 +170,24 @@ const Advisories = () => {
                     className="input-dark"
                     required
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select
+                    value={newAdvisory.category}
+                    onValueChange={(v) =>
+                      setNewAdvisory({ ...newAdvisory, category: v as AdvisoryCategory })
+                    }
+                  >
+                    <SelectTrigger className="input-dark">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="glass-card">
+                      <SelectItem value="general_advisory">General Advisory</SelectItem>
+                      <SelectItem value="specific_response">Specific Farmer Response</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -259,42 +288,59 @@ const Advisories = () => {
         </Dialog>
       </div>
 
+      {/* Category Filter Tabs */}
+      <div className="flex gap-2">
+        {(['all', 'general_advisory', 'specific_response'] as const).map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategoryFilter(cat)}
+            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all ${
+              categoryFilter === cat
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            {cat === 'all' ? 'All' : cat === 'general_advisory' ? 'General Advisory' : 'Specific Response'}
+          </button>
+        ))}
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="glass-card p-4 text-center">
-          <p className="text-2xl font-bold text-foreground">{advisories.length}</p>
-          <p className="text-xs text-muted-foreground">Total Advisories</p>
+          <p className="text-2xl font-bold text-foreground">{filteredAdvisories.length}</p>
+          <p className="text-xs text-muted-foreground">Showing</p>
         </div>
         <div className="glass-card p-4 text-center">
-          <p className="text-2xl font-bold text-primary">{advisories.filter(a => a.is_active).length}</p>
+          <p className="text-2xl font-bold text-primary">{filteredAdvisories.filter(a => a.is_active).length}</p>
           <p className="text-xs text-muted-foreground">Active</p>
         </div>
         <div className="glass-card p-4 text-center">
           <p className="text-2xl font-bold text-destructive">
-            {advisories.filter(a => a.severity === 'critical' || a.severity === 'high').length}
+            {filteredAdvisories.filter(a => a.severity === 'critical' || a.severity === 'high').length}
           </p>
           <p className="text-xs text-muted-foreground">High Priority</p>
         </div>
         <div className="glass-card p-4 text-center">
           <p className="text-2xl font-bold text-muted-foreground">
-            {advisories.filter(a => !a.is_active).length}
+            {filteredAdvisories.filter(a => !a.is_active).length}
           </p>
           <p className="text-xs text-muted-foreground">Inactive</p>
         </div>
       </div>
 
       {/* Advisory List */}
-      {advisories.length === 0 ? (
+      {filteredAdvisories.length === 0 ? (
         <div className="glass-card p-12 text-center">
           <Bell className="w-12 h-12 mx-auto text-muted-foreground mb-3" />
-          <h3 className="font-medium text-foreground mb-1">No advisories yet</h3>
+          <h3 className="font-medium text-foreground mb-1">No advisories in this category</h3>
           <p className="text-sm text-muted-foreground">
-            Create your first advisory to alert farmers about pest threats
+            Create an advisory to alert farmers about pest threats
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {advisories.map((advisory) => {
+          {filteredAdvisories.map((advisory) => {
             const severity = (advisory.severity as SeverityLevel) || 'medium';
             const config = severityConfig[severity] || severityConfig.medium;
             const SeverityIcon = config.icon;

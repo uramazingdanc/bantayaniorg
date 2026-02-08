@@ -18,36 +18,42 @@ export type Database = {
         Row: {
           affected_crops: string[]
           affected_regions: string[]
+          category: string | null
           content: string
           created_at: string
           created_by: string
           id: string
           is_active: boolean
           severity: string
+          target_farmer_id: string | null
           title: string
           updated_at: string
         }
         Insert: {
           affected_crops?: string[]
           affected_regions?: string[]
+          category?: string | null
           content: string
           created_at?: string
           created_by: string
           id?: string
           is_active?: boolean
           severity: string
+          target_farmer_id?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           affected_crops?: string[]
           affected_regions?: string[]
+          category?: string | null
           content?: string
           created_at?: string
           created_by?: string
           id?: string
           is_active?: boolean
           severity?: string
+          target_farmer_id?: string | null
           title?: string
           updated_at?: string
         }
@@ -95,6 +101,44 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          detection_id: string | null
+          id: string
+          is_read: boolean | null
+          recipient_id: string
+          sender_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          detection_id?: string | null
+          id?: string
+          is_read?: boolean | null
+          recipient_id: string
+          sender_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          detection_id?: string | null
+          id?: string
+          is_read?: boolean | null
+          recipient_id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_detection_id_fkey"
+            columns: ["detection_id"]
+            isOneToOne: false
+            referencedRelation: "pest_detections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pest_detections: {
         Row: {
           confidence: number
@@ -104,7 +148,9 @@ export type Database = {
           farmer_notes: string | null
           id: string
           image_url: string
+          intervention_type: string | null
           latitude: number | null
+          lgu_response_at: string | null
           location_name: string | null
           longitude: number | null
           notes: string | null
@@ -123,7 +169,9 @@ export type Database = {
           farmer_notes?: string | null
           id?: string
           image_url: string
+          intervention_type?: string | null
           latitude?: number | null
+          lgu_response_at?: string | null
           location_name?: string | null
           longitude?: number | null
           notes?: string | null
@@ -142,7 +190,9 @@ export type Database = {
           farmer_notes?: string | null
           id?: string
           image_url?: string
+          intervention_type?: string | null
           latitude?: number | null
+          lgu_response_at?: string | null
           location_name?: string | null
           longitude?: number | null
           notes?: string | null

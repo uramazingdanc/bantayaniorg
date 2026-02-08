@@ -15,10 +15,13 @@ import {
   Bell,
   AlertTriangle,
   Leaf,
+  Send,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -34,9 +37,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useDetections, DetectionWithProfile } from '@/hooks/useDetections';
+import { useMessages } from '@/hooks/useMessages';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+
+const INTERVENTION_TYPES = [
+  'Pheromone Lure',
+  'Biological Control Agent',
+  'Pesticide Application',
+  'Crop Rotation Advice',
+  'Quarantine Measures',
+  'Educational Visit',
+  'Other',
+];
 
 const REJECTION_REASONS = [
   'Blurry or unclear image',
@@ -48,13 +63,18 @@ const REJECTION_REASONS = [
 ];
 
 export const VerificationQueue = () => {
+  const { user } = useAuthContext();
   const { detections, isLoading, updateDetectionStatus, refetch } = useDetections(true);
+  const { sendMessage } = useMessages();
   const [selectedDetection, setSelectedDetection] = useState<DetectionWithProfile | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showRequestInfoDialog, setShowRequestInfoDialog] = useState(false);
+  const [showResponseDialog, setShowResponseDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [customRejectionNote, setCustomRejectionNote] = useState('');
   const [requestInfoMessage, setRequestInfoMessage] = useState('');
+  const [interventionType, setInterventionType] = useState('');
+  const [responseNotes, setResponseNotes] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [newReportCount, setNewReportCount] = useState(0);
 
@@ -168,14 +188,51 @@ export const VerificationQueue = () => {
       toast.error('Please enter a message for the farmer');
       return;
     }
-    // In a real app, this would send a notification/message to the farmer
-    // For now, we'll just add a note to the detection
     setIsUpdating(true);
     try {
-      // Here you could call an edge function to send a push notification
-      toast.success('Request sent to farmer for more information.');
+      // Send message to farmer
+      await sendMessage(selectedDetection.user_id, requestInfoMessage, selectedDetection.id);
+      toast.success('Message sent to farmer requesting more information.');
       setShowRequestInfoDialog(false);
       setRequestInfoMessage('');
+    } catch (error) {
+      toast.error('Failed to send message');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleLGUResponse = async () => {
+    if (!selectedDetection || !interventionType) {
+      toast.error('Please select an intervention type');
+      return;
+    }
+    setIsUpdating(true);
+    try {
+      // Update the detection with LGU response
+      const { error } = await supabase
+        .from('pest_detections')
+        .update({
+          lgu_response_at: new Date().toISOString(),
+          intervention_type: interventionType,
+          notes: responseNotes || `Intervention: ${interventionType}`,
+        })
+        .eq('id', selectedDetection.id);
+
+      if (error) throw error;
+
+      // Send a message to the farmer about the response
+      const message = `LGU Response: ${interventionType}${responseNotes ? ` - ${responseNotes}` : ''}`;
+      await sendMessage(selectedDetection.user_id, message, selectedDetection.id);
+
+      toast.success('LGU response recorded and farmer notified.');
+      setShowResponseDialog(false);
+      setInterventionType('');
+      setResponseNotes('');
+      refetch();
+    } catch (error) {
+      console.error('Error recording response:', error);
+      toast.error('Failed to record LGU response');
     } finally {
       setIsUpdating(false);
     }
@@ -341,10 +398,10 @@ export const VerificationQueue = () => {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="glass-card p-4">
+                <div className="glass-card p-4 space-y-3">
                   <div className="grid grid-cols-3 gap-3">
                     <Button
-                      className="h-14 bg-green-600 hover:bg-green-700 text-white"
+                      className="h-14 bg-primary hover:bg-primary/90 text-primary-foreground"
                       onClick={handleVerify}
                       disabled={isUpdating}
                     >
@@ -359,7 +416,7 @@ export const VerificationQueue = () => {
                     </Button>
                     <Button
                       variant="outline"
-                      className="h-14 border-red-500/50 text-red-500 hover:bg-red-500/10"
+                      className="h-14 border-destructive/50 text-destructive hover:bg-destructive/10"
                       onClick={() => setShowRejectDialog(true)}
                       disabled={isUpdating}
                     >
@@ -376,6 +433,19 @@ export const VerificationQueue = () => {
                       Request Info
                     </Button>
                   </div>
+
+                  {/* LGU Response Button - Only show for verified detections */}
+                  {selectedDetection.status === 'verified' && !(selectedDetection as any).lgu_response_at && (
+                    <Button
+                      variant="outline"
+                      className="w-full h-12 border-primary text-primary hover:bg-primary/10"
+                      onClick={() => setShowResponseDialog(true)}
+                      disabled={isUpdating}
+                    >
+                      <Send className="w-4 h-4 mr-2" />
+                      Record LGU Response / Intervention
+                    </Button>
+                  )}
                 </div>
 
                 {/* Navigation */}
@@ -497,6 +567,66 @@ export const VerificationQueue = () => {
               >
                 {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                 Send Request
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* LGU Response Dialog */}
+      <Dialog open={showResponseDialog} onOpenChange={setShowResponseDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5 text-primary" />
+              Record LGU Response
+            </DialogTitle>
+            <DialogDescription>
+              Record the intervention provided for this pest detection. The farmer will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Intervention Type</Label>
+              <Select value={interventionType} onValueChange={setInterventionType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select intervention type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {INTERVENTION_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Additional Notes (Optional)</Label>
+              <Textarea
+                placeholder="Describe the intervention provided, recommendations given, etc."
+                value={responseNotes}
+                onChange={(e) => setResponseNotes(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowResponseDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleLGUResponse}
+                disabled={isUpdating || !interventionType}
+              >
+                {isUpdating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Submit Response
               </Button>
             </div>
           </div>

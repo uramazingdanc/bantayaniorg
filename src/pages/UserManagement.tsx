@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Search, Mail, MapPin, MoreVertical, UserCheck, Users, Loader2, Phone, Ruler, User } from 'lucide-react';
+import { Search, Mail, MapPin, MoreVertical, UserCheck, Users, Loader2, Phone, Ruler, MessageSquare, FileText } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Textarea } from '@/components/ui/textarea';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,9 +13,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useFarmers, Farmer } from '@/hooks/useFarmers';
+import { useMessages } from '@/hooks/useMessages';
+import { useAuthContext } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 
 interface FarmerFarm {
   id: string;
@@ -29,11 +33,16 @@ interface FarmerFarm {
 
 const UserManagement = () => {
   const navigate = useNavigate();
+  const { user } = useAuthContext();
   const { farmers, isLoading, getStats } = useFarmers();
+  const { sendMessage } = useMessages();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFarmer, setSelectedFarmer] = useState<Farmer | null>(null);
   const [farmerFarms, setFarmerFarms] = useState<FarmerFarm[]>([]);
   const [loadingFarms, setLoadingFarms] = useState(false);
+  const [showMessageDialog, setShowMessageDialog] = useState(false);
+  const [messageContent, setMessageContent] = useState('');
+  const [isSending, setIsSending] = useState(false);
 
   const filteredFarmers = farmers.filter(
     (f) =>
@@ -330,8 +339,24 @@ const UserManagement = () => {
               </ScrollArea>
 
               <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    navigate(`/admin/pest-reports?farmer=${selectedFarmer.user_id}`);
+                    setSelectedFarmer(null);
+                  }}
+                >
+                  <FileText className="w-4 h-4 mr-2" />
                   View Reports
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setShowMessageDialog(true)}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Send Message
                 </Button>
                 <Button variant="outline" onClick={() => setSelectedFarmer(null)}>
                   Close
@@ -339,6 +364,56 @@ const UserManagement = () => {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Message Dialog */}
+      <Dialog open={showMessageDialog} onOpenChange={setShowMessageDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              Send Message to {selectedFarmer?.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Type your message..."
+              value={messageContent}
+              onChange={(e) => setMessageContent(e.target.value)}
+              rows={4}
+            />
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowMessageDialog(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={async () => {
+                  if (!selectedFarmer || !messageContent.trim()) return;
+                  setIsSending(true);
+                  try {
+                    await sendMessage(selectedFarmer.user_id, messageContent);
+                    toast.success('Message sent');
+                    setMessageContent('');
+                    setShowMessageDialog(false);
+                  } catch (error) {
+                    toast.error('Failed to send message');
+                  } finally {
+                    setIsSending(false);
+                  }
+                }}
+                disabled={isSending || !messageContent.trim()}
+              >
+                {isSending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Send
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
