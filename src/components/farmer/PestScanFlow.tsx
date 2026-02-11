@@ -23,6 +23,7 @@ import {
   MessageCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -53,6 +54,12 @@ interface LocationData {
   latitude: number;
   longitude: number;
   accuracy: number;
+}
+
+interface ManualLocationInput {
+  latitude: string;
+  longitude: string;
+  locationName: string;
 }
 
 interface DetectionResult {
@@ -108,6 +115,12 @@ export const PestScanFlow = () => {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showManualLocation, setShowManualLocation] = useState(false);
+  const [manualLocation, setManualLocation] = useState<ManualLocationInput>({
+    latitude: '',
+    longitude: '',
+    locationName: '',
+  });
 
   const { uploadDetection } = useDetections();
   const { farms, isLoading: farmsLoading } = useFarmerFarms();
@@ -199,6 +212,33 @@ export const PestScanFlow = () => {
     } else {
       toast.error('This farm has no GPS coordinates saved');
     }
+  };
+
+  // Use manually entered location
+  const useManualLocationInput = () => {
+    const lat = parseFloat(manualLocation.latitude);
+    const lng = parseFloat(manualLocation.longitude);
+    
+    if (isNaN(lat) || isNaN(lng)) {
+      toast.error('Please enter valid latitude and longitude values');
+      return;
+    }
+    
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      toast.error('Coordinates out of valid range');
+      return;
+    }
+
+    setReportData(prev => ({
+      ...prev,
+      location: {
+        latitude: lat,
+        longitude: lng,
+        accuracy: 0,
+      },
+    }));
+    toast.success('Manual location set successfully!');
+    setCurrentStep('camera');
   };
 
   // Step 2: Start Camera with better permission handling
@@ -679,6 +719,70 @@ export const PestScanFlow = () => {
                   </>
                 )}
               </Button>
+
+              {/* Manual Location Input Toggle */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">Or</span>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowManualLocation(!showManualLocation)}
+              >
+                <MapPin className="w-4 h-4 mr-2" />
+                {showManualLocation ? 'Hide Manual Input' : 'Enter Location Manually'}
+              </Button>
+
+              {showManualLocation && (
+                <div className="space-y-3 p-4 rounded-lg border border-border bg-muted/30">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Location Name (Optional)</Label>
+                    <Input
+                      value={manualLocation.locationName}
+                      onChange={(e) => setManualLocation(prev => ({ ...prev, locationName: e.target.value }))}
+                      placeholder="e.g. Near barangay hall, Rizal"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Latitude</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={manualLocation.latitude}
+                        onChange={(e) => setManualLocation(prev => ({ ...prev, latitude: e.target.value }))}
+                        placeholder="e.g. 15.4827"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Longitude</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={manualLocation.longitude}
+                        onChange={(e) => setManualLocation(prev => ({ ...prev, longitude: e.target.value }))}
+                        placeholder="e.g. 121.1537"
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    className="w-full btn-primary-glow"
+                    onClick={useManualLocationInput}
+                    disabled={!manualLocation.latitude || !manualLocation.longitude}
+                  >
+                    <MapPin className="w-4 h-4 mr-2" />
+                    Use This Location
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         )}

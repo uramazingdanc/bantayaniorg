@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAdvisories } from '@/hooks/useAdvisories';
+import { useFarmers } from '@/hooks/useFarmers';
 import { formatDistanceToNow } from 'date-fns';
 import {
   Bell,
@@ -58,6 +59,7 @@ type AdvisoryCategory = 'general_advisory' | 'specific_response';
 
 const Advisories = () => {
   const { advisories, isLoading, createAdvisory, toggleActive, deleteAdvisory } = useAdvisories();
+  const { farmers, isLoading: farmersLoading } = useFarmers();
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedAdvisory, setSelectedAdvisory] = useState<typeof advisories[0] | null>(null);
@@ -69,6 +71,7 @@ const Advisories = () => {
     affectedBarangays: [] as string[],
     severity: 'medium' as SeverityLevel,
     category: 'general_advisory' as AdvisoryCategory,
+    targetFarmerId: '' as string,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,6 +86,7 @@ const Advisories = () => {
         affected_crops: newAdvisory.affectedCrops.split(',').map((c) => c.trim()).filter(Boolean),
         affected_regions: newAdvisory.affectedBarangays,
         category: newAdvisory.category,
+        target_farmer_id: newAdvisory.category === 'specific_response' && newAdvisory.targetFarmerId ? newAdvisory.targetFarmerId : undefined,
       });
       
       setNewAdvisory({
@@ -92,6 +96,7 @@ const Advisories = () => {
         affectedBarangays: [],
         severity: 'medium',
         category: 'general_advisory',
+        targetFarmerId: '',
       });
       setIsOpen(false);
     } catch (error) {
@@ -189,6 +194,36 @@ const Advisories = () => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Target Farmer Dropdown - only for Specific Response */}
+                {newAdvisory.category === 'specific_response' && (
+                  <div className="space-y-2">
+                    <Label>Target Farmer</Label>
+                    <Select
+                      value={newAdvisory.targetFarmerId}
+                      onValueChange={(v) =>
+                        setNewAdvisory({ ...newAdvisory, targetFarmerId: v })
+                      }
+                    >
+                      <SelectTrigger className="input-dark">
+                        <SelectValue placeholder="Select a farmer..." />
+                      </SelectTrigger>
+                      <SelectContent className="glass-card max-h-60">
+                        {farmersLoading ? (
+                          <SelectItem value="loading" disabled>Loading farmers...</SelectItem>
+                        ) : farmers.length === 0 ? (
+                          <SelectItem value="none" disabled>No farmers found</SelectItem>
+                        ) : (
+                          farmers.map((farmer) => (
+                            <SelectItem key={farmer.user_id} value={farmer.user_id}>
+                              {farmer.name} ({farmer.email})
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Severity</Label>
