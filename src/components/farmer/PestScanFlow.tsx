@@ -21,6 +21,7 @@ import {
   ImagePlus,
   Trash2,
   MessageCircle,
+  ScanLine,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -98,6 +99,7 @@ export const PestScanFlow = () => {
   // Camera controls
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [flashSupported, setFlashSupported] = useState(false);
+  const [autoCaptureEnabled, setAutoCaptureEnabled] = useState(false);
 
   // Report data
   const [reportData, setReportData] = useState<ReportData>({
@@ -826,28 +828,14 @@ export const PestScanFlow = () => {
                 </Badge>
               )}
               
-              {/* Flash Toggle with Label */}
-              <div className="flex flex-col items-center gap-1">
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className={cn(
-                    "bg-background/80 backdrop-blur",
-                    flashEnabled && "bg-yellow-500/80"
-                  )}
-                  onClick={toggleFlash}
-                  disabled={!flashSupported}
-                >
-                  {flashEnabled ? (
-                    <Flashlight className="w-5 h-5 text-yellow-900" />
-                  ) : (
-                    <FlashlightOff className="w-5 h-5" />
-                  )}
-                </Button>
-                <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
-                  {flashSupported ? (flashEnabled ? 'Flash On' : 'Flash Off') : 'No Flash'}
-                </span>
-              </div>
+              {/* AI Status Badge */}
+              <Badge variant="secondary" className={cn(
+                "bg-background/80 backdrop-blur",
+                autoCaptureEnabled && "bg-primary/80 text-primary-foreground"
+              )}>
+                <ScanLine className="w-3 h-3 mr-1" />
+                {autoCaptureEnabled ? 'AI Auto-Capture On' : 'Manual Mode'}
+              </Badge>
             </div>
 
             {/* Captured Images Preview */}
@@ -874,7 +862,8 @@ export const PestScanFlow = () => {
             )}
 
             {/* Bottom Controls */}
-            <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-4">
+            <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-3">
+              {/* Status text */}
               <p className="text-white text-sm bg-black/50 px-4 py-2 rounded-full flex items-center gap-2">
                 <Bug className="w-4 h-4" />
                 {reportData.images.length === 0 
@@ -883,27 +872,51 @@ export const PestScanFlow = () => {
                 }
               </p>
 
-              <div className="flex items-center gap-4">
-                {/* Upload Images Button with Label */}
+              <div className="flex items-center gap-3">
+                {/* Flash Toggle */}
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={toggleFlash}
+                    disabled={!flashSupported}
+                    className={cn(
+                      "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
+                      flashEnabled
+                        ? "bg-yellow-500/80 backdrop-blur"
+                        : "bg-white/20 backdrop-blur hover:bg-white/30",
+                      !flashSupported && "opacity-40"
+                    )}
+                  >
+                    {flashEnabled ? (
+                      <Flashlight className="w-5 h-5 text-yellow-900" />
+                    ) : (
+                      <FlashlightOff className="w-5 h-5 text-white" />
+                    )}
+                  </button>
+                  <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
+                    Flash
+                  </span>
+                </div>
+
+                {/* Upload Button */}
                 <div className="flex flex-col items-center gap-1">
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={reportData.images.length >= MAX_IMAGES}
                     className={cn(
-                      "w-14 h-14 rounded-full flex items-center justify-center",
+                      "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
                       reportData.images.length >= MAX_IMAGES
-                        ? "bg-white/10 backdrop-blur"
+                        ? "bg-white/10 backdrop-blur opacity-40"
                         : "bg-white/20 backdrop-blur hover:bg-white/30"
                     )}
                   >
-                    <Upload className="w-6 h-6 text-white" />
+                    <Upload className="w-5 h-5 text-white" />
                   </button>
                   <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
                     Upload
                   </span>
                 </div>
 
-                {/* Capture Button */}
+                {/* Capture Button (center, larger) */}
                 <button
                   onClick={capturePhoto}
                   disabled={!isStreaming || reportData.images.length >= MAX_IMAGES}
@@ -914,19 +927,40 @@ export const PestScanFlow = () => {
                   </div>
                 </button>
 
-                {/* Proceed Button with Label */}
+                {/* Auto-Capture Toggle */}
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={() => setAutoCaptureEnabled(!autoCaptureEnabled)}
+                    className={cn(
+                      "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
+                      autoCaptureEnabled
+                        ? "bg-primary/80 backdrop-blur"
+                        : "bg-white/20 backdrop-blur hover:bg-white/30"
+                    )}
+                  >
+                    <ScanLine className={cn(
+                      "w-5 h-5",
+                      autoCaptureEnabled ? "text-primary-foreground" : "text-white"
+                    )} />
+                  </button>
+                  <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
+                    {autoCaptureEnabled ? 'Auto On' : 'Auto Off'}
+                  </span>
+                </div>
+
+                {/* Proceed/Analyze Button */}
                 <div className="flex flex-col items-center gap-1">
                   <button
                     onClick={proceedToDiagnosis}
                     disabled={reportData.images.length === 0}
                     className={cn(
-                      "w-14 h-14 rounded-full flex items-center justify-center",
+                      "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
                       reportData.images.length > 0 
                         ? "bg-primary text-primary-foreground" 
                         : "bg-white/20 backdrop-blur text-white/50"
                     )}
                   >
-                    <ArrowRight className="w-6 h-6" />
+                    <ArrowRight className="w-5 h-5" />
                   </button>
                   <span className="text-[10px] text-white bg-black/50 px-2 py-0.5 rounded-full">
                     Analyze
