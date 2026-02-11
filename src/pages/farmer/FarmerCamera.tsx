@@ -1,12 +1,16 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Camera, Zap, ZapOff, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, MapPin, Bug } from 'lucide-react';
+import { ArrowLeft, Camera, Zap, ZapOff, RefreshCw, Wifi, WifiOff, Loader2, CheckCircle2, AlertTriangle, MapPin, Bug, Upload, ScanLine, Flashlight, FlashlightOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { useDetections } from '@/hooks/useDetections';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 const CROP_OPTIONS = [
   'Onion', 'Rice', 'Corn', 'Coconut', 'Sugarcane', 'Banana', 
@@ -19,9 +23,6 @@ const TARGET_PESTS = [
   'Fall Armyworm', 
   'African Armyworm',
   'Maize Stalk Borer',
-  'Rice Stem Borer',
-  'Brown Planthopper',
-  'Leaf Folder',
 ];
 
 interface DetectionResult {
@@ -48,9 +49,12 @@ const FarmerCamera = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [isStreaming, setIsStreaming] = useState(false);
-  const [autoDetect, setAutoDetect] = useState(true);
+  const [autoDetect, setAutoDetect] = useState(false);
+  const [flashEnabled, setFlashEnabled] = useState(false);
+  const [flashSupported, setFlashSupported] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [cropType, setCropType] = useState('Onion');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -59,6 +63,7 @@ const FarmerCamera = () => {
   const [pendingUploads, setPendingUploads] = useState<CapturedImage[]>([]);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [farmerNotes, setFarmerNotes] = useState('');
 
   const { uploadDetection } = useDetections();
 
@@ -107,6 +112,13 @@ const FarmerCamera = () => {
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
         setIsStreaming(true);
+
+        // Check flash support
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities?.();
+        if (capabilities && 'torch' in capabilities) {
+          setFlashSupported(true);
+        }
       }
     } catch (error) {
       toast.error('Unable to access camera');
@@ -120,8 +132,23 @@ const FarmerCamera = () => {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
       setIsStreaming(false);
+      setFlashEnabled(false);
     }
   }, []);
+
+  // Toggle flash
+  const toggleFlash = useCallback(async () => {
+    if (!streamRef.current) return;
+    const track = streamRef.current.getVideoTracks()[0];
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: !flashEnabled } as any]
+      });
+      setFlashEnabled(!flashEnabled);
+    } catch {
+      toast.error('Flash not supported on this device');
+    }
+  }, [flashEnabled]);
 
   // Start camera on mount
   useEffect(() => {
@@ -178,7 +205,6 @@ const FarmerCamera = () => {
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
     
-    // Stop camera while processing
     stopCamera();
 
     const captured: CapturedImage = {
@@ -191,7 +217,6 @@ const FarmerCamera = () => {
 
     setCapturedImage(captured);
 
-    // Analyze with AI if online
     if (isOnline) {
       const detection = await analyzeImage(dataUrl);
       setCapturedImage(prev => prev ? { ...prev, detection } : null);
@@ -200,11 +225,47 @@ const FarmerCamera = () => {
     }
   }, [cropType, location, stopCamera, isOnline]);
 
+  // Handle file upload
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string;
+      
+      stopCamera();
+
+      const captured: CapturedImage = {
+        dataUrl,
+        timestamp: new Date().toISOString(),
+        location,
+        cropType,
+        detection: null,
+      };
+
+      setCapturedImage(captured);
+
+      if (isOnline) {
+        const detection = await analyzeImage(dataUrl);
+        setCapturedImage(prev => prev ? { ...prev, detection } : null);
+      } else {
+        setAnalysisError('Offline - AI analysis unavailable');
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }, [cropType, location, stopCamera, isOnline]);
+
   // Auto-capture when AI detects something in continuous mode
   useEffect(() => {
     if (!autoDetect || !isStreaming || capturedImage || isAnalyzing) return;
 
-    // Auto-capture every 5 seconds for analysis
     const interval = setInterval(() => {
       handleCapture();
     }, 5000);
@@ -231,6 +292,7 @@ const FarmerCamera = () => {
           latitude: capturedImage.location?.lat,
           longitude: capturedImage.location?.lng,
           image_base64: capturedImage.dataUrl,
+          farmer_notes: farmerNotes || undefined,
         });
         toast.success('Detection uploaded successfully!');
         navigate('/farmer');
@@ -292,6 +354,7 @@ const FarmerCamera = () => {
   const handleRetake = () => {
     setCapturedImage(null);
     setAnalysisError(null);
+    setFarmerNotes('');
     startCamera();
   };
 
@@ -316,13 +379,11 @@ const FarmerCamera = () => {
         </Button>
         
         <div className="flex items-center gap-2">
-          {/* Online Status */}
           <Badge variant="outline" className={`${isOnline ? 'text-green-400 border-green-400' : 'text-red-400 border-red-400'}`}>
             {isOnline ? <Wifi className="w-3 h-3 mr-1" /> : <WifiOff className="w-3 h-3 mr-1" />}
             {isOnline ? 'Online' : 'Offline'}
           </Badge>
 
-          {/* Pending Uploads Badge */}
           {pendingUploads.length > 0 && (
             <Badge 
               variant="outline" 
@@ -354,7 +415,7 @@ const FarmerCamera = () => {
             />
             
             {/* Scanning Overlay */}
-            {autoDetect && isStreaming && (
+            {isStreaming && (
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div className="w-64 h-64 border-2 border-primary rounded-2xl relative">
                   <div className="absolute inset-0 border-2 border-primary/50 rounded-2xl animate-ping" />
@@ -383,7 +444,7 @@ const FarmerCamera = () => {
 
         {/* Detection Result Overlay */}
         {capturedImage && !isAnalyzing && (
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent">
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent max-h-[70vh] overflow-y-auto">
             <div className="glass-card p-4 max-w-md mx-auto">
               {detection?.detected ? (
                 <>
@@ -394,7 +455,7 @@ const FarmerCamera = () => {
                       {detection.scientific_name && (
                         <p className="text-xs text-gray-400 italic">{detection.scientific_name}</p>
                       )}
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <Badge variant="outline" className="text-primary border-primary">
                           {Math.round(detection.confidence * 100)}% confidence
                         </Badge>
@@ -451,7 +512,7 @@ const FarmerCamera = () => {
                 </div>
               )}
               
-              <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
+              <div className="flex items-center gap-2 text-xs text-gray-400 mb-3">
                 <span>{cropType}</span>
                 <span>•</span>
                 <span>{new Date().toLocaleTimeString()}</span>
@@ -464,6 +525,18 @@ const FarmerCamera = () => {
                     </span>
                   </>
                 )}
+              </div>
+
+              {/* Farmer Notes */}
+              <div className="mb-4 space-y-2">
+                <Label className="text-sm text-gray-300">Add Notes (Optional)</Label>
+                <Textarea
+                  placeholder="Describe what you observed, crop condition, or any other details..."
+                  value={farmerNotes}
+                  onChange={(e) => setFarmerNotes(e.target.value)}
+                  rows={3}
+                  className="bg-white/10 border-white/20 text-white placeholder:text-gray-500"
+                />
               </div>
 
               <div className="flex gap-2">
@@ -489,7 +562,7 @@ const FarmerCamera = () => {
         <canvas ref={canvasRef} className="hidden" />
       </div>
 
-      {/* Controls */}
+      {/* Controls - only when camera is active */}
       {!capturedImage && (
         <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black to-transparent">
           <div className="max-w-md mx-auto space-y-4">
@@ -509,7 +582,7 @@ const FarmerCamera = () => {
 
             {/* Target Pests Info */}
             <div className="flex flex-wrap justify-center gap-1">
-              {TARGET_PESTS.slice(0, 4).map((pest) => (
+              {TARGET_PESTS.map((pest) => (
                 <Badge key={pest} variant="outline" className="text-xs text-gray-400 border-gray-600">
                   {pest}
                 </Badge>
@@ -517,16 +590,39 @@ const FarmerCamera = () => {
             </div>
 
             {/* Capture Controls */}
-            <div className="flex items-center justify-center gap-6">
-              {/* Auto-detect Toggle */}
-              <button
-                onClick={() => setAutoDetect(!autoDetect)}
-                className={`p-3 rounded-full transition-colors ${
-                  autoDetect ? 'bg-primary text-primary-foreground' : 'bg-white/20 text-white'
-                }`}
-              >
-                {autoDetect ? <Zap className="w-6 h-6" /> : <ZapOff className="w-6 h-6" />}
-              </button>
+            <div className="flex items-center justify-center gap-4">
+              {/* Flash Toggle */}
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={toggleFlash}
+                  disabled={!flashSupported}
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
+                    flashEnabled
+                      ? "bg-yellow-500/80"
+                      : "bg-white/20 hover:bg-white/30",
+                    !flashSupported && "opacity-40"
+                  )}
+                >
+                  {flashEnabled ? (
+                    <Flashlight className="w-5 h-5 text-yellow-900" />
+                  ) : (
+                    <FlashlightOff className="w-5 h-5 text-white" />
+                  )}
+                </button>
+                <span className="text-[10px] text-gray-400">Flash</span>
+              </div>
+
+              {/* Upload Photo Button */}
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"
+                >
+                  <Upload className="w-5 h-5 text-white" />
+                </button>
+                <span className="text-[10px] text-gray-400">Upload</span>
+              </div>
 
               {/* Capture Button */}
               <button
@@ -539,13 +635,37 @@ const FarmerCamera = () => {
                 </div>
               </button>
 
-              {/* Placeholder for symmetry */}
-              <div className="w-12 h-12" />
+              {/* Auto-Capture Toggle (distinct ScanLine icon) */}
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={() => setAutoDetect(!autoDetect)}
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center transition-colors",
+                    autoDetect
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-white/20 hover:bg-white/30 text-white"
+                  )}
+                >
+                  <ScanLine className="w-5 h-5" />
+                </button>
+                <span className="text-[10px] text-gray-400">
+                  {autoDetect ? 'Auto On' : 'Auto Off'}
+                </span>
+              </div>
             </div>
 
             <p className="text-center text-xs text-gray-400">
-              {autoDetect ? 'AI auto-capture enabled • Detecting armyworm & pests' : 'Tap to capture and analyze'}
+              {autoDetect ? 'AI auto-capture enabled • Detecting armyworm & pests' : 'Tap to capture or upload photo for analysis'}
             </p>
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
           </div>
         </div>
       )}
