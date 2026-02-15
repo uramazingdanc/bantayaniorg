@@ -64,6 +64,9 @@ const FarmerCamera = () => {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [farmerNotes, setFarmerNotes] = useState('');
+  const [manualLat, setManualLat] = useState('');
+  const [manualLng, setManualLng] = useState('');
+  const [locationMode, setLocationMode] = useState<'gps' | 'manual'>('gps');
 
   const { uploadDetection } = useDetections();
 
@@ -285,12 +288,14 @@ const FarmerCamera = () => {
 
     if (isOnline) {
       try {
+        const submitLat = locationMode === 'manual' && manualLat ? parseFloat(manualLat) : capturedImage.location?.lat;
+        const submitLng = locationMode === 'manual' && manualLng ? parseFloat(manualLng) : capturedImage.location?.lng;
         await uploadDetection({
           pest_type: pestType,
           confidence: confidence,
           crop_type: capturedImage.cropType,
-          latitude: capturedImage.location?.lat,
-          longitude: capturedImage.location?.lng,
+          latitude: submitLat,
+          longitude: submitLng,
           image_base64: capturedImage.dataUrl,
           farmer_notes: farmerNotes || undefined,
         });
@@ -524,6 +529,64 @@ const FarmerCamera = () => {
                       GPS Captured
                     </span>
                   </>
+                )}
+              </div>
+
+              {/* Location Input */}
+              <div className="mb-4 space-y-2">
+                <Label className="text-sm text-gray-300 flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> Location
+                </Label>
+                <div className="flex gap-2 mb-2">
+                  <Button
+                    type="button"
+                    variant={locationMode === 'gps' ? 'default' : 'outline'}
+                    size="sm"
+                    className={cn("flex-1 text-xs", locationMode !== 'gps' && "border-white/20 text-gray-300")}
+                    onClick={() => {
+                      setLocationMode('gps');
+                      if (location) {
+                        setManualLat(location.lat.toString());
+                        setManualLng(location.lng.toString());
+                      }
+                    }}
+                  >
+                    <MapPin className="w-3 h-3 mr-1" />
+                    Current Location
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={locationMode === 'manual' ? 'default' : 'outline'}
+                    size="sm"
+                    className={cn("flex-1 text-xs", locationMode !== 'manual' && "border-white/20 text-gray-300")}
+                    onClick={() => setLocationMode('manual')}
+                  >
+                    Manual Input
+                  </Button>
+                </div>
+                {locationMode === 'gps' ? (
+                  <p className="text-xs text-gray-400">
+                    {location ? `📍 ${location.lat.toFixed(6)}, ${location.lng.toFixed(6)}` : 'GPS location not available'}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="Latitude"
+                      value={manualLat}
+                      onChange={(e) => setManualLat(e.target.value)}
+                      className="bg-white/10 border-white/20 text-white placeholder:text-gray-500 text-sm"
+                    />
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="Longitude"
+                      value={manualLng}
+                      onChange={(e) => setManualLng(e.target.value)}
+                      className="bg-white/10 border-white/20 text-white placeholder:text-gray-500 text-sm"
+                    />
+                  </div>
                 )}
               </div>
 
