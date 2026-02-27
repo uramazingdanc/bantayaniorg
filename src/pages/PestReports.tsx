@@ -14,6 +14,15 @@ import {
 } from '@/components/ui/select';
 import { useDetections, DetectionWithProfile } from '@/hooks/useDetections';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
+
+const escapeCSV = (value: string | number | null | undefined): string => {
+  const str = String(value ?? '');
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
 
 const PestReports = () => {
   const { detections, isLoading } = useDetections(true);
@@ -44,6 +53,33 @@ const PestReports = () => {
     return variants[status] || 'bg-muted text-muted-foreground';
   };
 
+  const exportToCSV = () => {
+    if (filteredDetections.length === 0) {
+      toast.warning('No reports to export');
+      return;
+    }
+    const headers = ['ID','Pest Type','Crop Type','Status','Confidence','Farmer Name','Farmer Email','Location','Latitude','Longitude','Farmer Notes','LGU Notes','Submitted At','Verified At'];
+    const rows = filteredDetections.map(d => [
+      d.id, d.pest_type, d.crop_type, d.status,
+      `${(Number(d.confidence) * 100).toFixed(0)}%`,
+      d.farmer_name || '', d.farmer_email || '',
+      d.location_name || '',
+      d.latitude ?? '', d.longitude ?? '',
+      d.farmer_notes || '', d.notes || '',
+      format(new Date(d.created_at), 'yyyy-MM-dd HH:mm'),
+      d.verified_at ? format(new Date(d.verified_at), 'yyyy-MM-dd HH:mm') : '',
+    ].map(escapeCSV).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pest-reports-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredDetections.length} reports`);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -59,7 +95,7 @@ const PestReports = () => {
           <h1 className="text-2xl font-bold text-foreground">Pest Reports</h1>
           <p className="text-muted-foreground">Processed pest detection reports from farmers</p>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={exportToCSV}>
           <Download className="w-4 h-4" />
           Export CSV
         </Button>
