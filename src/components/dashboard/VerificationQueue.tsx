@@ -293,6 +293,18 @@ export const VerificationQueue = () => {
                     src={selectedDetection.image_url || '/placeholder.svg'}
                     alt={selectedDetection.pest_type}
                     className="w-full h-full object-cover"
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.currentTarget;
+                      // Try without crossOrigin on first error
+                      if (target.crossOrigin) {
+                        target.crossOrigin = '';
+                        target.src = selectedDetection.image_url || '/placeholder.svg';
+                      } else {
+                        target.src = '/placeholder.svg';
+                      }
+                    }}
                   />
                   <Badge className="absolute top-3 left-3 bg-primary">
                     <Leaf className="w-3 h-3 mr-1" />
