@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import {
   CheckCircle2,
@@ -77,9 +77,39 @@ export const VerificationQueue = () => {
   const [responseNotes, setResponseNotes] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [newReportCount, setNewReportCount] = useState(0);
+  const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null);
 
   // Filter to show only pending detections in queue
   const pendingDetections = detections.filter((d) => d.status === 'pending');
+
+  // Fetch image as blob to bypass cross-origin issues
+  useEffect(() => {
+    let cancelled = false;
+    let currentBlobUrl: string | null = null;
+
+    const loadImage = async () => {
+      setImageBlobUrl(null);
+      if (!selectedDetection?.image_url) return;
+
+      try {
+        const response = await fetch(selectedDetection.image_url);
+        if (!response.ok) throw new Error('Failed to fetch image');
+        const blob = await response.blob();
+        if (cancelled) return;
+        currentBlobUrl = URL.createObjectURL(blob);
+        setImageBlobUrl(currentBlobUrl);
+      } catch (err) {
+        console.error('Error loading image:', err);
+      }
+    };
+
+    loadImage();
+
+    return () => {
+      cancelled = true;
+      if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+    };
+  }, [selectedDetection?.id, selectedDetection?.image_url]);
 
   // Set up realtime subscription for new reports
   useEffect(() => {
@@ -289,23 +319,22 @@ export const VerificationQueue = () => {
               <>
                 {/* Image */}
                 <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-muted">
-                  <img
-                    src={selectedDetection.image_url || '/placeholder.svg'}
-                    alt={selectedDetection.pest_type}
-                    className="w-full h-full object-cover"
-                    crossOrigin="anonymous"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      // Try without crossOrigin on first error
-                      if (target.crossOrigin) {
-                        target.crossOrigin = '';
-                        target.src = selectedDetection.image_url || '/placeholder.svg';
-                      } else {
-                        target.src = '/placeholder.svg';
-                      }
-                    }}
-                  />
+                  {imageBlobUrl ? (
+                    <img
+                      key={selectedDetection.id}
+                      src={imageBlobUrl}
+                      alt={selectedDetection.pest_type}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : selectedDetection.image_url ? (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    </div>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      <p className="text-sm">No image available</p>
+                    </div>
+                  )}
                   <Badge className="absolute top-3 left-3 bg-primary">
                     <Leaf className="w-3 h-3 mr-1" />
                     {selectedDetection.crop_type}

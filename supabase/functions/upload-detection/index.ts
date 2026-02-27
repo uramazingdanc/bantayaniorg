@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
+import { decode as base64Decode } from "https://deno.land/std@0.208.0/encoding/base64.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -96,8 +96,8 @@ Deno.serve(async (req) => {
 
       if (body.image_base64) {
         // Decode base64 and upload
-        const base64Data = body.image_base64.replace(/^data:image\/\w+;base64,/, "");
-        const imageBuffer = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        const base64Data = body.image_base64.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+        const imageBuffer = base64Decode(base64Data);
         const fileName = `${userId}/${crypto.randomUUID()}.jpg`;
         
         const { error: uploadError } = await supabase.storage
